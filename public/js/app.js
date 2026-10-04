@@ -55,10 +55,12 @@ const storage = {
 
 function debounce(fn, ms) {
   let t;
-  return (...args) => {
+  const run = (...args) => {
     clearTimeout(t);
     t = setTimeout(() => fn(...args), ms);
   };
+  run.cancel = () => clearTimeout(t);
+  return run;
 }
 
 function el(tag, className, text) {
@@ -421,7 +423,10 @@ const refreshPreviewSoon = debounce(() => refreshPreview(), 120);
 
 function onOptionsEdited() {
   hideFormErrors();
-  refreshPreviewSoon();
+  // During a call, record the edit right away: a debounced refresh landing just
+  // after the response would otherwise wipe the result instead of marking it stale.
+  if (busy) pendingRefresh = true;
+  else refreshPreviewSoon();
   saveState();
 }
 
@@ -557,14 +562,25 @@ function markStale() {
   setStatus(same ? 'done' : 'stale');
 }
 
-// Scrolls the result into view when it is off screen, or always on narrow
-// layouts where the result sits below the form.
+// Brings `target` (the bar, or the error box) fully into view. On narrow layouts
+// the result sits below the form, so the card's top is brought up as well.
 function revealResult(target) {
-  const r = target.getBoundingClientRect();
+  const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
   const narrow = window.matchMedia('(max-width: 960px)').matches;
-  if (!narrow && r.top >= 0 && r.top <= window.innerHeight - 160) return;
-  const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  resultCard.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' });
+  if (narrow) {
+    const card = resultCard.getBoundingClientRect();
+    const r = target.getBoundingClientRect();
+    // Align the card's top unless that would push the target below the fold.
+    const delta = r.bottom - card.top + 16 <= window.innerHeight ? card.top - 12 : r.bottom - window.innerHeight + 16;
+    window.scrollBy({ top: delta, behavior });
+    return;
+  }
+  const r = target.getBoundingClientRect();
+  if (r.top >= 8 && r.bottom <= window.innerHeight - 8) return;
+  // The result column is sticky: scrolling up moves it down until it sticks, so
+  // scroll by the target's own offset rather than scrolling the card.
+  const delta = r.top < 8 ? r.top - 16 : r.bottom - window.innerHeight + 16;
+  window.scrollBy({ top: delta, behavior });
 }
 
 function showMeta(json, ms, stateSource) {
@@ -654,9 +670,12 @@ const FIELD_INPUT = {
   },
 };
 
+// Option rows are flagged as a group (e.g. both duplicates), so they are cleared
+// as a group too: fixing either duplicate un-flags both.
 function hideFormErrors() {
   formErrors.hidden = true;
   formErrors.replaceChildren();
+  for (const input of document.querySelectorAll('.option-list input[aria-invalid]')) input.removeAttribute('aria-invalid');
 }
 
 function showFormErrors(errors) {
@@ -704,6 +723,9 @@ async function submit() {
   const type = state.type;
   const items = built.items;
   const sent = { snapshot: JSON.stringify([built.body, built.items]), question: state.question.trim() };
+  // The request already includes every edit, so a preview refresh still waiting
+  // on its debounce must not fire later and wipe this call's result.
+  refreshPreviewSoon.cancel();
   resetResultExtras();
   lastSent = null;
   pendingRefresh = false;
@@ -754,7 +776,7 @@ async function submit() {
     pendingRefresh = false;
     shownQuestion = null;
     renderQuestionEcho();
-    viz.clear(['调用失败', '原因见下方说明。']);
+    viz.clear(['还没有结果', '这次调用没有成功，原因见上方。修改后可以再试一次。']);
     showResultError(error);
     showRaw(built.body, endpoint.url, responseText);
     revealResult(resultError);
@@ -786,7 +808,8 @@ async function submit() {
   showMeta(json, ms, built.stateSource);
   showRaw(built.body, endpoint.url, text);
   markStale();
-  revealResult($('viz'));
+  // Aim at the bar (or score ruler), not the whole viz, which can be taller than the screen.
+  revealResult($('viz').querySelector('.bar, .ruler') ?? $('viz'));
   await viz.play(result);
 }
 

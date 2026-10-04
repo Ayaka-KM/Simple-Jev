@@ -704,7 +704,6 @@ textarea:focus-visible {
 }
 .primary-btn[aria-busy="true"] {
   cursor: progress;
-  opacity: 0.9;
 }
 
 .spinner {
@@ -780,13 +779,18 @@ kbd {
   overflow-wrap: anywhere;
 }
 
-.result-card.is-stale .bar,
-.result-card.is-stale .row-meter,
-.result-card.is-stale .ruler-track,
-.result-card.is-stale .meter {
+.result-card.is-stale .seg,
+.result-card.is-stale .row-fill,
+.result-card.is-stale .ruler-fill,
+.result-card.is-stale .marker-dot,
+.result-card.is-stale .meter-fill {
   opacity: 0.4;
   filter: grayscale(0.6);
   transition: opacity 0.2s, filter 0.2s;
+}
+.result-card.is-stale .seg:focus-visible {
+  opacity: 1;
+  filter: none;
 }
 
 /* ---- visualization ------------------------------------------------------- */
@@ -1101,7 +1105,7 @@ kbd {
 /* ---- error / meta / raw -------------------------------------------------- */
 
 .result-error {
-  margin-top: 16px;
+  margin: 10px 0 8px;
   padding: 14px 16px;
   border-radius: 12px;
   background: var(--danger-soft);

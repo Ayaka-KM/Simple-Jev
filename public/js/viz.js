@@ -54,38 +54,61 @@ export function createViz(root, tooltip) {
   let refs = {};
 
   // ---- tooltip ------------------------------------------------------------
-  // Pointer tooltips sit above the pointer; keyboard-focus tooltips sit below the
-  // mark so they do not cover the big percentages above the bar.
-  function showTip(target, x, y, below = false) {
-    const value = target.dataset.tipValue;
-    const label = target.dataset.tipLabel;
-    if (!value) return;
-    tooltip.replaceChildren(el('strong', null, value), el('span', null, label));
-    tooltip.hidden = false;
-    const pad = 12;
+  // Pointer tooltips sit above the pointer. Keyboard-focus tooltips sit below the
+  // mark (so they do not cover the big percentages above the bar), or above it
+  // when there is no room below.
+  let tipTarget = null;
+  let tipFocus = false;
+
+  function placeTip(left, top) {
     const { width, height } = tooltip.getBoundingClientRect();
-    let left = x - width / 2;
-    let top = below ? y + pad : y - height - pad;
-    left = Math.max(8, Math.min(window.innerWidth - width - 8, left));
-    if (top < 8) top = y + pad + 8;
-    if (top + height > window.innerHeight - 8) top = Math.max(8, y - height - pad);
-    tooltip.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
+    const x = Math.max(8, Math.min(window.innerWidth - width - 8, left - width / 2));
+    tooltip.style.transform = `translate(${Math.round(x)}px, ${Math.round(top(height))}px)`;
+  }
+  function fillTip(target) {
+    const value = target.dataset.tipValue;
+    if (!value) return false;
+    tooltip.replaceChildren(el('strong', null, value), el('span', null, target.dataset.tipLabel));
+    tooltip.hidden = false;
+    tipTarget = target;
+    return true;
+  }
+  function showPointerTip(target, x, y) {
+    tipFocus = false;
+    if (!fillTip(target)) return;
+    const pad = 12;
+    placeTip(x, (h) => (y - h - pad < 8 ? y + pad + 8 : y - h - pad));
+  }
+  function showFocusTip(target) {
+    tipFocus = true;
+    if (!fillTip(target)) return;
+    const pad = 10;
+    const r = target.getBoundingClientRect();
+    placeTip(r.left + r.width / 2, (h) => (r.bottom + pad + h > window.innerHeight - 8 ? r.top - h - pad : r.bottom + pad));
   }
   function hideTip() {
     tooltip.hidden = true;
+    tipTarget = null;
   }
   function bindTip(node) {
-    node.addEventListener('pointermove', (e) => showTip(node, e.clientX, e.clientY));
+    node.addEventListener('pointermove', (e) => showPointerTip(node, e.clientX, e.clientY));
     node.addEventListener('pointerleave', hideTip);
-    node.addEventListener('focus', () => {
-      const r = node.getBoundingClientRect();
-      showTip(node, r.left + r.width / 2, r.bottom, true);
-    });
+    node.addEventListener('focus', () => showFocusTip(node));
     node.addEventListener('blur', hideTip);
   }
-  // The tooltip is position: fixed, so it would drift away from its mark on scroll.
-  window.addEventListener('scroll', hideTip, { passive: true, capture: true });
-  window.addEventListener('resize', hideTip, { passive: true });
+  // The tooltip is position: fixed. On scroll a pointer tooltip is dropped; a
+  // keyboard one follows its mark (focusing a mark can itself scroll the page).
+  function onViewportChange() {
+    if (tooltip.hidden) return;
+    if (tipFocus && tipTarget && document.activeElement === tipTarget) {
+      const target = tipTarget;
+      requestAnimationFrame(() => document.activeElement === target && showFocusTip(target));
+    } else {
+      hideTip();
+    }
+  }
+  window.addEventListener('scroll', onViewportChange, { passive: true, capture: true });
+  window.addEventListener('resize', onViewportChange, { passive: true });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') hideTip();
   });
@@ -303,9 +326,18 @@ export function createViz(root, tooltip) {
     seg.style.width = geo.width;
     seg.dataset.tipValue = text;
     seg.setAttribute('aria-label', `${it.label}：${text}`);
-    // Slivers under 1% are too thin to show a focus ring; their value is in the rows below.
-    seg.tabIndex = it.pct >= 1 ? 0 : -1;
   }
+
+  // Only segments wide enough to show a focus ring are tab stops, and only once the
+  // result has fully grown in. Every value is also listed in the rows below.
+  const MIN_FOCUS_WIDTH = 6;
+  function updateSegFocus() {
+    refs.segs?.forEach((seg) => {
+      const wide = !seg.hidden && seg.getBoundingClientRect().width >= MIN_FOCUS_WIDTH;
+      seg.tabIndex = result && level === 1 && wide ? 0 : -1;
+    });
+  }
+  window.addEventListener('resize', () => updateSegFocus(), { passive: true });
 
   function paintRows(res, its, k) {
     its.forEach((it, i) => {
@@ -389,13 +421,17 @@ export function createViz(root, tooltip) {
     root.classList.add('has-result');
     anim = tween(GROW_MS, easeInOutCubic, paint);
     const done = await anim.promise;
-    if (done) setBadges(res);
+    if (done) {
+      setBadges(res);
+      updateSegFocus();
+    }
   }
 
   // Shrinks whatever is on screen back to 0 while a new call is in flight.
   async function drain() {
     anim?.cancel();
     setBadges(null);
+    refs.segs?.forEach((seg) => (seg.tabIndex = -1));
     refs.headMain.textContent = '正在等待 Jev 回答…';
     refs.headSub.textContent = '通常一秒内就会返回。';
     if (!result || level === 0) {

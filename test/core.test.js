@@ -276,6 +276,16 @@ describe('readAnswer', () => {
     assert.equal(readAnswer('choice', json, choiceItems).confidence, null);
   });
 
+  it('treats an empty or all-null probabilities object as missing', () => {
+    const levels = displayItems('score', { score: [{ text: 'a' }, { text: 'b' }, { text: 'c' }] });
+    const nulls = { answers: { [QUESTION_KEY]: { type: 'score', score: 1.4, probabilities: { 0: null, 1: null, 2: null } } } };
+    const r = readAnswer('score', nulls, levels);
+    assert.equal(r.estimated, true);
+    assert.equal(r.peak, null);
+    const empty = { answers: { [QUESTION_KEY]: { type: 'choice', choice: '活', probabilities: {} } } };
+    assert.equal(readAnswer('choice', empty, choiceItems).estimated, true);
+  });
+
   it('shows no winner on an exact 50/50 noul', () => {
     const items = displayItems('noul', {});
     assert.equal(readAnswer('noul', { answers: { [QUESTION_KEY]: { type: 'noul', noul: 0.5 } } }, items).winner, null);

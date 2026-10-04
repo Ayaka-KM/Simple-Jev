@@ -247,10 +247,13 @@ export function readAnswer(type, json, items) {
     };
   }
 
-  const probs =
+  // Probabilities count only if at least one value is a real number; an empty or
+  // all-null object is treated like a missing one.
+  const rawProbs =
     answer.probabilities && typeof answer.probabilities === 'object' && !Array.isArray(answer.probabilities)
       ? answer.probabilities
       : null;
+  const probs = rawProbs && Object.values(rawProbs).some((v) => num(v) != null) ? rawProbs : null;
 
   if (type === 'choice') {
     const choice = typeof answer.choice === 'string' ? answer.choice : null;
