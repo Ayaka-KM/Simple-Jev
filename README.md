@@ -40,7 +40,7 @@ Jev 是 TypeSafe 的决策模型：它不生成文字，只在你给定的选项
 
 ## 本地开发
 
-需要 Node.js 18 及以上版本。
+需要 Node.js 22 及以上版本（wrangler 4 的要求；仓库里的 `.node-version` 让 Cloudflare 构建也用 Node 22）。
 
 ```bash
 npm install

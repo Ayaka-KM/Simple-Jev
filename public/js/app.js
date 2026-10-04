@@ -171,16 +171,25 @@ const raw = $('raw');
 const viz = createViz($('viz'), $('tooltip'));
 
 let busy = false;
-let lastSent = null; // { question, context, model } of the request on screen
+let lastSent = null; // { snapshot, question } of the successful request on screen
+let shownQuestion = null; // question of the request in flight or on screen; null = echo the form
+let pendingRefresh = false; // options or type changed while a call was in flight
 
 // ---- theme ---------------------------------------------------------------
 
 const THEME_LABEL = { auto: '跟随系统', light: '浅色', dark: '深色' };
 const themeBtn = $('theme-toggle');
 
+const THEME_COLOR = { light: '#f6f5f1', dark: '#0d0d0d' };
+
 function applyTheme(mode) {
   if (mode === 'light' || mode === 'dark') document.documentElement.dataset.theme = mode;
   else delete document.documentElement.dataset.theme;
+  // Keep the browser chrome in step with a manual override.
+  for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
+    const own = meta.media.includes('dark') ? 'dark' : 'light';
+    meta.content = THEME_COLOR[mode === 'auto' ? own : mode];
+  }
   themeBtn.dataset.mode = mode;
   $('theme-label').textContent = THEME_LABEL[mode];
   themeBtn.setAttribute('aria-label', `切换主题：当前为${THEME_LABEL[mode]}`);
@@ -219,11 +228,15 @@ toggleKeyBtn.addEventListener('click', () => {
   const show = keyInput.type === 'password';
   keyInput.type = show ? 'text' : 'password';
   toggleKeyBtn.textContent = show ? '隐藏' : '显示';
-  toggleKeyBtn.setAttribute('aria-pressed', String(show));
+  toggleKeyBtn.setAttribute('aria-label', show ? '隐藏 Key' : '显示 Key');
 });
 
 const saveKey = debounce(() => {
-  if (rememberKey.checked && keyInput.value.trim()) storage.set(KEY_STORE, keyInput.value.trim());
+  if (!rememberKey.checked) return;
+  // An emptied field means "forget it", not "keep the old one".
+  const key = keyInput.value.trim();
+  if (key) storage.set(KEY_STORE, key);
+  else storage.remove(KEY_STORE);
 }, 300);
 
 keyInput.addEventListener('input', () => {
@@ -270,7 +283,7 @@ modelCustom.addEventListener('input', () => {
 // ---- question fields -----------------------------------------------------
 
 function renderQuestionEcho() {
-  const q = state.question.trim();
+  const q = (shownQuestion ?? state.question).trim();
   resultQuestion.textContent = q ? `问：${q}` : '';
 }
 
@@ -463,7 +476,8 @@ function bindListEditor(listEl, render, addBtn, makeItem, max) {
 
   // Enter moves to the next row, or adds one at the end, instead of submitting.
   listEl.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' || e.isComposing || e.ctrlKey || e.metaKey) return;
+    // keyCode 229: Safari reports the Enter that commits IME text this way, without isComposing.
+    if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229 || e.ctrlKey || e.metaKey) return;
     const input = e.target.closest('input');
     const row = e.target.closest('li');
     if (!input || !row) return;
@@ -514,23 +528,43 @@ function resetResultExtras() {
   raw.hidden = true;
 }
 
-// Options or type changed: show the new options at 0%.
+// Options or type changed: show the new options at 0%. While a call is in flight
+// the bars belong to that call, so the refresh waits until it finishes.
 function refreshPreview() {
-  if (busy) return;
+  if (busy) {
+    pendingRefresh = true;
+    return;
+  }
+  pendingRefresh = false;
   viz.build(state.type, displayItems(state.type, state));
   lastSent = null;
+  shownQuestion = null;
+  renderQuestionEcho();
   resetResultExtras();
   setStatus('idle');
 }
 
+// What the form would send right now, to compare with the request on screen.
+function formSnapshot() {
+  const built = buildRequest({ ...state, model: currentModel() });
+  return built.ok ? JSON.stringify([built.body, built.items]) : 'invalid';
+}
+
 function markStale() {
-  if (busy || !lastSent || !viz.hasResult()) return;
-  const same =
-    lastSent.question === state.question.trim() &&
-    lastSent.context === state.context.trim() &&
-    lastSent.model === currentModel();
+  if (busy || !lastSent) return;
+  const same = formSnapshot() === lastSent.snapshot;
   resultCard.classList.toggle('is-stale', !same);
   setStatus(same ? 'done' : 'stale');
+}
+
+// Scrolls the result into view when it is off screen, or always on narrow
+// layouts where the result sits below the form.
+function revealResult(target) {
+  const r = target.getBoundingClientRect();
+  const narrow = window.matchMedia('(max-width: 960px)').matches;
+  if (!narrow && r.top >= 0 && r.top <= window.innerHeight - 160) return;
+  const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  resultCard.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' });
 }
 
 function showMeta(json, ms, stateSource) {
@@ -610,12 +644,13 @@ const FIELD_INPUT = {
   apiKey: () => keyInput,
   model: () => (modelSelect.value === CUSTOM_MODEL ? modelCustom : modelSelect),
   question: () => questionInput,
-  options: () => {
+  // Marks the rows the error names (duplicates, unnamed or blank rows) and returns the first.
+  options: (err) => {
     const list = state.type === 'choice' ? choiceList : scoreList;
-    const inputs = [...list.querySelectorAll('input')];
-    const blank = inputs.filter((i) => i.dataset.field !== 'desc' && !i.value.trim());
-    blank.forEach((i) => i.setAttribute('aria-invalid', 'true'));
-    return blank[0] ?? inputs[0];
+    const inputs = [...list.children].map((row) => row.querySelector('input'));
+    const flagged = (err.rows ?? []).map((i) => inputs[i]).filter(Boolean);
+    for (const input of flagged) input.setAttribute('aria-invalid', 'true');
+    return flagged[0] ?? inputs[0];
   },
 };
 
@@ -631,7 +666,7 @@ function showFormErrors(errors) {
   formErrors.hidden = false;
   let first = null;
   for (const err of errors) {
-    const input = FIELD_INPUT[err.field]?.();
+    const input = FIELD_INPUT[err.field]?.(err);
     if (!input) continue;
     if (err.field !== 'options') input.setAttribute('aria-invalid', 'true');
     first ??= input;
@@ -668,14 +703,18 @@ async function submit() {
 
   const type = state.type;
   const items = built.items;
+  const sent = { snapshot: JSON.stringify([built.body, built.items]), question: state.question.trim() };
   resetResultExtras();
+  lastSent = null;
+  pendingRefresh = false;
+  shownQuestion = sent.question;
+  renderQuestionEcho();
   setBusy(true);
   // Blank rows are not sent, so rebuild the bars if they differ from what is sent;
   // otherwise shrink the previous result back to 0 while waiting.
   if (signatureOf(type, items) !== viz.signature()) viz.build(type, items);
   const drained = viz.drain();
 
-  const sent = { question: state.question.trim(), context: state.context.trim(), model: built.body.model };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const t0 = performance.now();
@@ -709,19 +748,20 @@ async function submit() {
   await drained;
   setBusy(false);
 
-  if (failure) {
-    viz.clear();
-    showResultError(failure);
-    showRaw(built.body, endpoint.url, '');
-    return;
-  }
+  const fail = (error, responseText) => {
+    // Options or type edited mid-call: show the form's current options at 0%.
+    if (pendingRefresh) viz.build(state.type, displayItems(state.type, state));
+    pendingRefresh = false;
+    shownQuestion = null;
+    renderQuestionEcho();
+    viz.clear(['调用失败', '原因见下方说明。']);
+    showResultError(error);
+    showRaw(built.body, endpoint.url, responseText);
+    revealResult(resultError);
+  };
 
-  if (!response.ok) {
-    viz.clear();
-    showResultError(parseError(response.status, text));
-    showRaw(built.body, endpoint.url, text);
-    return;
-  }
+  if (failure) return fail(failure, '');
+  if (!response.ok) return fail(parseError(response.status, text), text);
 
   let result;
   let json;
@@ -729,28 +769,24 @@ async function submit() {
     json = JSON.parse(text);
     result = readAnswer(type, json, items);
   } catch (err) {
-    viz.clear();
-    showResultError({
-      title: '无法识别返回内容',
-      hint: '服务返回了成功状态，但内容不是预期的 Jev 格式。请检查 Base URL 是否指向 Jev 的 Decisions 接口。',
-      detail: isAnswerShapeError(err) ? err.message : '返回的内容不是有效的 JSON',
-    });
-    showRaw(built.body, endpoint.url, text);
-    return;
+    return fail(
+      {
+        title: '无法识别返回内容',
+        hint: '服务返回了成功状态，但内容不是预期的 Jev 格式。请检查 Base URL 是否指向 Jev 的 Decisions 接口。',
+        detail: isAnswerShapeError(err) ? err.message : '返回的内容不是有效的 JSON',
+      },
+      text,
+    );
   }
 
+  // Edits made while the call was in flight show up as a stale marker on this result.
+  pendingRefresh = false;
   lastSent = sent;
   setStatus('done');
   showMeta(json, ms, built.stateSource);
   showRaw(built.body, endpoint.url, text);
   markStale();
-
-  // On narrow screens the result sits below the form; bring it into view so the
-  // animation is seen. (On wide screens the result column is sticky and already visible.)
-  if (window.matchMedia('(max-width: 960px)').matches) {
-    const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    resultCard.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' });
-  }
+  revealResult($('viz'));
   await viz.play(result);
 }
 
@@ -760,7 +796,7 @@ form.addEventListener('submit', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing) {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing && e.keyCode !== 229) {
     e.preventDefault();
     submit();
   }

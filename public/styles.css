@@ -13,7 +13,8 @@
   --line: #dddcd5;
   --track: #ebeae5;
   --accent: #2a78d6;
-  --accent-hover: #256abf;
+  --button: #256abf;
+  --button-hover: #1c5cab;
   --accent-soft: #e3eefb;
   --accent-ink: #1c5cab;
   --ramp-lo: #b7d3f6;
@@ -58,7 +59,8 @@
     --line: #34342f;
     --track: #2c2c2a;
     --accent: #2a78d6;
-    --accent-hover: #3987e5;
+    --button: #256abf;
+    --button-hover: #1c5cab;
     --accent-soft: #15263c;
     --accent-ink: #9ec5f4;
     --ramp-lo: #184f95;
@@ -98,7 +100,8 @@
   --line: #34342f;
   --track: #2c2c2a;
   --accent: #2a78d6;
-  --accent-hover: #3987e5;
+  --button: #256abf;
+  --button-hover: #1c5cab;
   --accent-soft: #15263c;
   --accent-ink: #9ec5f4;
   --ramp-lo: #184f95;
@@ -289,6 +292,7 @@ h1 {
 }
 
 .form-col,
+.form-stack,
 .result-col {
   display: flex;
   flex-direction: column;
@@ -396,7 +400,7 @@ select {
 input::placeholder,
 textarea::placeholder {
   color: var(--ink-3);
-  opacity: 0.85;
+  opacity: 1;
 }
 input:hover,
 select:hover,
@@ -682,18 +686,18 @@ textarea:focus-visible {
   padding: 0 32px;
   border: 0;
   border-radius: 12px;
-  background: var(--accent);
+  background: var(--button);
   color: #fff;
   font: inherit;
   font-size: 17px;
   font-weight: 650;
   letter-spacing: 0.04em;
   cursor: pointer;
-  box-shadow: 0 6px 18px -6px rgba(42, 120, 214, 0.55);
+  box-shadow: 0 6px 18px -6px rgba(37, 106, 191, 0.55);
   transition: background-color 0.15s, transform 0.1s, box-shadow 0.15s;
 }
 .primary-btn:hover {
-  background: var(--accent-hover);
+  background: var(--button-hover);
 }
 .primary-btn:active {
   transform: translateY(1px);
@@ -776,9 +780,13 @@ kbd {
   overflow-wrap: anywhere;
 }
 
-.result-card.is-stale .viz {
-  opacity: 0.55;
-  transition: opacity 0.2s;
+.result-card.is-stale .bar,
+.result-card.is-stale .row-meter,
+.result-card.is-stale .ruler-track,
+.result-card.is-stale .meter {
+  opacity: 0.4;
+  filter: grayscale(0.6);
+  transition: opacity 0.2s, filter 0.2s;
 }
 
 /* ---- visualization ------------------------------------------------------- */
@@ -1011,13 +1019,13 @@ kbd {
 
 /* Score ruler: position on an ordered scale. */
 .ruler {
-  padding: 40px 14px 4px;
+  padding: 40px 14px 0;
   margin-bottom: 16px;
 }
 .ruler-caption {
   font-size: 12.5px;
   color: var(--ink-3);
-  margin: -32px -14px 22px;
+  margin: 2px -14px 0;
 }
 .ruler-track {
   position: relative;
@@ -1224,6 +1232,11 @@ kbd {
 }
 .tooltip strong {
   font-size: 15px;
+  flex-shrink: 0;
+}
+.tooltip span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* ---- motion -------------------------------------------------------------- */

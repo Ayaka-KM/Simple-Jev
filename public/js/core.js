@@ -20,7 +20,8 @@ export const LIMITS = {
 
 export const NOUL_LABELS = { true: '是', false: '否' };
 
-const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+// Plain http is allowed only for these hosts; keep in sync with connect-src in public/_headers.
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
 
 // Turns whatever the user typed as Base URL into the full Decisions endpoint.
 // Accepts the API root (https://openrouter.ai/api), the OpenAI-style root with
@@ -113,8 +114,8 @@ export function displayItems(type, form) {
 }
 
 // Builds the POST body. Returns { ok, body, items, errors, stateSource }: `items`
-// are the options actually sent (blank rows are skipped), in the user's order;
-// each error carries the form field it belongs to so the UI can highlight it.
+// are the options actually sent, in the user's order. Each error carries the form
+// field it belongs to, and option errors list the offending row indexes in `rows`.
 export function buildRequest(form) {
   const errors = [];
   const type = form.type;
@@ -135,15 +136,20 @@ export function buildRequest(form) {
     if (t || f) q.criteria = { true: t || NOUL_LABELS.true, false: f || NOUL_LABELS.false };
     items = displayItems('noul', form);
   } else if (type === 'choice') {
-    const used = (form.choice ?? [])
-      .map((o, i) => ({ name: clean(o.name), desc: clean(o.desc), slot: o.slot ?? i + 1 }))
-      .filter((r) => r.name || r.desc);
+    // Fully blank rows are skipped; their order carries no meaning.
+    const rows = (form.choice ?? []).map((o, i) => ({ name: clean(o.name), desc: clean(o.desc), slot: o.slot ?? i + 1, i }));
+    const used = rows.filter((r) => r.name || r.desc);
     const { min, max } = LIMITS.choice;
-    if (used.some((r) => !r.name)) errors.push({ field: 'options', message: '每个选项都需要填写名称' });
+    const unnamed = used.filter((r) => !r.name).map((r) => r.i);
+    if (unnamed.length) errors.push({ field: 'options', message: '每个选项都需要填写名称', rows: unnamed });
     const names = used.map((r) => r.name).filter(Boolean);
-    const dupes = names.filter((n, i) => names.indexOf(n) !== i);
-    if (dupes.length) errors.push({ field: 'options', message: `选项名称重复：${[...new Set(dupes)].join('、')}` });
-    if (names.length < min) errors.push({ field: 'options', message: `单选题至少需要 ${min} 个选项` });
+    const dupes = [...new Set(names.filter((n, i) => names.indexOf(n) !== i))];
+    if (dupes.length) {
+      const dupeRows = used.filter((r) => dupes.includes(r.name)).map((r) => r.i);
+      errors.push({ field: 'options', message: `选项名称重复：${dupes.join('、')}`, rows: dupeRows });
+    }
+    const blankRows = rows.filter((r) => !r.name).map((r) => r.i);
+    if (names.length < min) errors.push({ field: 'options', message: `单选题至少需要 ${min} 个选项`, rows: blankRows });
     if (names.length > max) errors.push({ field: 'options', message: `单选题最多 ${max} 个选项` });
     // Object.fromEntries defines own properties, so a name like "__proto__" stays a plain key.
     q = {
@@ -153,12 +159,21 @@ export function buildRequest(form) {
     };
     items = used.map((r) => ({ key: r.name, label: r.name, desc: r.desc, slot: r.slot }));
   } else if (type === 'score') {
-    const filled = (form.score ?? []).map((l) => clean(l.text)).filter(Boolean);
+    // Levels are ordered, so a blank one is an error rather than silently renumbering the rest.
+    const levels = (form.score ?? []).map((l) => clean(l.text));
     const { min, max } = LIMITS.score;
-    if (filled.length < min) errors.push({ field: 'options', message: `打分题至少需要 ${min} 档` });
-    if (filled.length > max) errors.push({ field: 'options', message: `打分题最多 ${max} 档` });
-    q = { type: 'score', instructions: question, criteria: filled };
-    items = filled.map((label, i) => ({ key: String(i), label, desc: '', slot: 1 }));
+    const blank = levels.map((l, i) => (l ? -1 : i)).filter((i) => i >= 0);
+    if (blank.length) {
+      errors.push({
+        field: 'options',
+        message: `第 ${blank.map((i) => i + 1).join('、')} 档是空的，请填写或删除`,
+        rows: blank,
+      });
+    }
+    if (levels.length < min) errors.push({ field: 'options', message: `打分题至少需要 ${min} 档` });
+    if (levels.length > max) errors.push({ field: 'options', message: `打分题最多 ${max} 档` });
+    q = { type: 'score', instructions: question, criteria: levels };
+    items = levels.map((label, i) => ({ key: String(i), label, desc: '', slot: 1 }));
   }
 
   if (errors.length) return { ok: false, errors };
@@ -173,6 +188,15 @@ export function buildRequest(form) {
 }
 
 const clamp01 = (n) => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
+
+// A finite number, or null. Unlike Number(), null/''/false/[] do not become 0.
+function num(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) return Number(v);
+  return null;
+}
+const prob = (v) => clamp01(num(v) ?? 0);
+const conf = (v) => (num(v) == null ? null : clamp01(num(v)));
 
 // Integer percentages that always add up to 100 (largest-remainder rounding),
 // so the labels never read "74% + 27%".
@@ -208,8 +232,8 @@ export function readAnswer(type, json, items) {
   }
 
   if (type === 'noul') {
-    const p = Number(answer.noul);
-    if (!Number.isFinite(p)) throw new AnswerShapeError('返回内容里缺少 noul 概率');
+    const p = num(answer.noul);
+    if (p == null) throw new AnswerShapeError('返回内容里缺少 noul 概率');
     const yes = clamp01(p);
     const raw = [yes, 1 - yes];
     const pct = toPercents(raw);
@@ -217,13 +241,18 @@ export function readAnswer(type, json, items) {
       type,
       probability: yes,
       items: items.map((it, i) => ({ ...it, p: raw[i], share: raw[i], pct: pct[i] })),
-      winner: yes >= 0.5 ? 'true' : 'false',
+      winner: yes > 0.5 ? 'true' : yes < 0.5 ? 'false' : null,
       confidence: null,
+      estimated: false,
     };
   }
 
+  const probs =
+    answer.probabilities && typeof answer.probabilities === 'object' && !Array.isArray(answer.probabilities)
+      ? answer.probabilities
+      : null;
+
   if (type === 'choice') {
-    const probs = answer.probabilities && typeof answer.probabilities === 'object' ? answer.probabilities : null;
     const choice = typeof answer.choice === 'string' ? answer.choice : null;
     if (!probs && choice == null) throw new AnswerShapeError('返回内容里缺少选项概率');
     const list = items.map((it) => ({ ...it }));
@@ -233,7 +262,9 @@ export function readAnswer(type, json, items) {
         if (!list.some((it) => it.key === k)) list.push({ key: k, label: k, desc: '', slot: 0 });
       }
     }
-    const raw = list.map((it) => (probs ? clamp01(Number(probs[it.key])) : it.key === choice ? 1 : 0));
+    // Without probabilities only the chosen option is known: it fills the bar, and
+    // `estimated` tells the UI not to present that as a measured 100%.
+    const raw = list.map((it) => (probs ? prob(probs[it.key]) : it.key === choice ? 1 : 0));
     const shares = toShares(raw);
     const pct = toPercents(raw);
     let winner = choice;
@@ -244,19 +275,18 @@ export function readAnswer(type, json, items) {
       type,
       items: list.map((it, i) => ({ ...it, p: raw[i], share: shares[i], pct: pct[i] })),
       winner,
-      confidence: Number.isFinite(Number(answer.confidence)) ? clamp01(Number(answer.confidence)) : null,
+      confidence: conf(answer.confidence),
       estimated: !probs,
     };
   }
 
   // score
   const n = items.length;
-  const score = Number(answer.score);
-  if (!Number.isFinite(score)) throw new AnswerShapeError('返回内容里缺少 score 分数');
-  const probs = answer.probabilities && typeof answer.probabilities === 'object' ? answer.probabilities : null;
+  const score = num(answer.score);
+  if (score == null) throw new AnswerShapeError('返回内容里缺少 score 分数');
   const max = Math.max(0, n - 1);
   const position = Math.min(max, Math.max(0, score));
-  const raw = items.map((_, i) => (probs ? clamp01(Number(probs[String(i)])) : i === Math.round(position) ? 1 : 0));
+  const raw = items.map((_, i) => (probs ? prob(probs[String(i)]) : i === Math.round(position) ? 1 : 0));
   const shares = toShares(raw);
   const pct = toPercents(raw);
   const peak = raw.indexOf(Math.max(...raw));
@@ -266,8 +296,8 @@ export function readAnswer(type, json, items) {
     max,
     items: items.map((it, i) => ({ ...it, p: raw[i], share: shares[i], pct: pct[i] })),
     winner: String(Math.round(position)),
-    peak: String(peak),
-    confidence: Number.isFinite(Number(answer.confidence)) ? clamp01(Number(answer.confidence)) : null,
+    peak: probs ? String(peak) : null,
+    confidence: conf(answer.confidence),
     estimated: !probs,
   };
 }
@@ -330,7 +360,9 @@ export function parseError(status, bodyText) {
   let detail = '';
   try {
     const j = JSON.parse(bodyText);
-    detail = j?.error?.message ?? j?.message ?? '';
+    if (typeof j === 'string') detail = j;
+    else if (typeof j?.error === 'string') detail = j.error;
+    else detail = j?.error?.message ?? j?.message ?? '';
     if (typeof detail !== 'string') detail = JSON.stringify(detail);
   } catch {
     detail = String(bodyText ?? '').trim();
@@ -348,15 +380,17 @@ export function formatUsd(cost) {
   return `$${n.toFixed(digits).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')}`;
 }
 
+// Single-quotes a value for POSIX shells.
+const shellQuote = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;
+
 // A copy-pasteable curl command. The key stays an environment variable so it
 // never ends up in the clipboard.
 export function buildCurl(endpoint, body) {
-  const json = JSON.stringify(body, null, 2).replace(/'/g, "'\\''");
   return [
-    `curl ${endpoint} \\`,
+    `curl ${shellQuote(endpoint)} \\`,
     '  -H "Authorization: Bearer $OPENROUTER_API_KEY" \\',
     '  -H "Content-Type: application/json" \\',
-    `  -d '${json}'`,
+    `  -d ${shellQuote(JSON.stringify(body, null, 2))}`,
   ].join('\n');
 }
 

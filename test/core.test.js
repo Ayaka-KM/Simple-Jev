@@ -53,9 +53,11 @@ describe('resolveEndpoint', () => {
   it('drops query strings and fragments', () => {
     assert.equal(resolveEndpoint('https://example.com/api?x=1#y').url, 'https://example.com/api/alpha/decisions');
   });
-  it('rejects plain http except for localhost', () => {
+  it('rejects plain http except for localhost and 127.0.0.1 (the hosts the CSP allows)', () => {
     assert.equal(resolveEndpoint('http://example.com/api').ok, false);
+    assert.equal(resolveEndpoint('http://[::1]:8787/api').ok, false);
     assert.equal(resolveEndpoint('http://localhost:8787/api').url, 'http://localhost:8787/api/alpha/decisions');
+    assert.equal(resolveEndpoint('http://127.0.0.1:8787/api').ok, true);
   });
   it('rejects garbage and embedded credentials', () => {
     assert.equal(resolveEndpoint('not a url').ok, false);
@@ -150,13 +152,14 @@ describe('buildRequest', () => {
     assert.deepEqual(Object.keys(json.questions[QUESTION_KEY].criteria), ['__proto__', 'b']);
   });
 
-  it('reports missing names, duplicates and option counts', () => {
+  it('reports missing names, duplicates and option counts, naming the offending rows', () => {
     const missing = buildRequest({ ...baseForm, type: 'choice', choice: [{ name: '', desc: 'only desc' }, { name: 'B' }] });
     assert.equal(missing.ok, false);
-    assert.ok(missing.errors.some((e) => e.field === 'options' && /名称/.test(e.message)));
+    const unnamed = missing.errors.find((e) => e.field === 'options' && /名称/.test(e.message));
+    assert.deepEqual(unnamed.rows, [0]);
 
-    const dupes = buildRequest({ ...baseForm, type: 'choice', choice: [{ name: 'A' }, { name: 'A' }] });
-    assert.ok(dupes.errors.some((e) => /重复/.test(e.message)));
+    const dupes = buildRequest({ ...baseForm, type: 'choice', choice: [{ name: 'A' }, { name: '' }, { name: 'A' }] });
+    assert.deepEqual(dupes.errors.find((e) => /重复/.test(e.message)).rows, [0, 2]);
 
     const one = buildRequest({ ...baseForm, type: 'choice', choice: [{ name: 'A' }] });
     assert.ok(one.errors.some((e) => /至少/.test(e.message)));
@@ -169,16 +172,25 @@ describe('buildRequest', () => {
     assert.ok(nine.errors.some((e) => /最多/.test(e.message)));
   });
 
-  it('builds score criteria in order and skips blank levels', () => {
-    const r = buildRequest({ ...baseForm, type: 'score', score: [{ text: '低' }, { text: ' ' }, { text: '高' }] });
-    assert.deepEqual(r.body.questions[QUESTION_KEY].criteria, ['低', '高']);
+  it('builds score criteria in order', () => {
+    const r = buildRequest({ ...baseForm, type: 'score' });
+    assert.deepEqual(r.body.questions[QUESTION_KEY].criteria, ['低', '中', '高']);
     assert.deepEqual(
       r.items.map((it) => [it.key, it.label]),
       [
         ['0', '低'],
-        ['1', '高'],
+        ['1', '中'],
+        ['2', '高'],
       ],
     );
+  });
+
+  it('rejects blank score levels instead of renumbering the rest', () => {
+    const r = buildRequest({ ...baseForm, type: 'score', score: [{ text: '低' }, { text: ' ' }, { text: '高' }] });
+    assert.equal(r.ok, false);
+    const err = r.errors.find((e) => e.field === 'options');
+    assert.match(err.message, /第 2 档/);
+    assert.deepEqual(err.rows, [1]);
   });
 
   it('requires a question and a model without spaces', () => {
@@ -255,6 +267,20 @@ describe('readAnswer', () => {
     assert.equal(r.estimated, true);
   });
 
+  it('treats null or non-numeric fields as missing, not as 0', () => {
+    const items = displayItems('noul', {});
+    assert.throws(() => readAnswer('noul', { answers: { [QUESTION_KEY]: { type: 'noul', noul: null } } }, items), /noul/);
+    const levels = displayItems('score', { score: [{ text: 'a' }, { text: 'b' }] });
+    assert.throws(() => readAnswer('score', { answers: { [QUESTION_KEY]: { type: 'score', score: '' } } }, levels), /score/);
+    const json = { answers: { [QUESTION_KEY]: { type: 'choice', choice: '活', probabilities: { 活: 1, 死: 0 }, confidence: null } } };
+    assert.equal(readAnswer('choice', json, choiceItems).confidence, null);
+  });
+
+  it('shows no winner on an exact 50/50 noul', () => {
+    const items = displayItems('noul', {});
+    assert.equal(readAnswer('noul', { answers: { [QUESTION_KEY]: { type: 'noul', noul: 0.5 } } }, items).winner, null);
+  });
+
   it('reads a noul answer as two shares', () => {
     const items = displayItems('noul', {});
     const r = readAnswer('noul', { answers: { [QUESTION_KEY]: { type: 'noul', noul: 0.96 } } }, items);
@@ -317,6 +343,9 @@ describe('parseError', () => {
     const e = parseError(400, JSON.stringify({ error: { message: msg, code: 400 } }));
     assert.equal(e.detail, 'state：Invalid input');
   });
+  it('reads an error given as a plain string', () => {
+    assert.equal(parseError(500, '{"error":"upstream exploded"}').detail, 'upstream exploded');
+  });
   it('handles unknown statuses and non-JSON bodies', () => {
     const e = parseError(418, '<html>teapot</html>');
     assert.match(e.title, /418/);
@@ -338,5 +367,9 @@ describe('buildCurl', () => {
     const cmd = buildCurl('https://openrouter.ai/api/alpha/decisions', { state: "it's" });
     assert.match(cmd, /\$OPENROUTER_API_KEY/);
     assert.match(cmd, /it'\\''s/);
+  });
+  it('quotes the endpoint so shell metacharacters in it are inert', () => {
+    const cmd = buildCurl("https://example.com/a;touch$IFS/tmp/x/alpha/decisions", {});
+    assert.ok(cmd.startsWith("curl 'https://example.com/a;touch$IFS/tmp/x/alpha/decisions' \\"));
   });
 });

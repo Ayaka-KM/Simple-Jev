@@ -54,7 +54,9 @@ export function createViz(root, tooltip) {
   let refs = {};
 
   // ---- tooltip ------------------------------------------------------------
-  function showTip(target, x, y) {
+  // Pointer tooltips sit above the pointer; keyboard-focus tooltips sit below the
+  // mark so they do not cover the big percentages above the bar.
+  function showTip(target, x, y, below = false) {
     const value = target.dataset.tipValue;
     const label = target.dataset.tipLabel;
     if (!value) return;
@@ -63,9 +65,10 @@ export function createViz(root, tooltip) {
     const pad = 12;
     const { width, height } = tooltip.getBoundingClientRect();
     let left = x - width / 2;
-    let top = y - height - pad;
+    let top = below ? y + pad : y - height - pad;
     left = Math.max(8, Math.min(window.innerWidth - width - 8, left));
     if (top < 8) top = y + pad + 8;
+    if (top + height > window.innerHeight - 8) top = Math.max(8, y - height - pad);
     tooltip.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
   }
   function hideTip() {
@@ -76,10 +79,16 @@ export function createViz(root, tooltip) {
     node.addEventListener('pointerleave', hideTip);
     node.addEventListener('focus', () => {
       const r = node.getBoundingClientRect();
-      showTip(node, r.left + r.width / 2, r.top);
+      showTip(node, r.left + r.width / 2, r.bottom, true);
     });
     node.addEventListener('blur', hideTip);
   }
+  // The tooltip is position: fixed, so it would drift away from its mark on scroll.
+  window.addEventListener('scroll', hideTip, { passive: true, capture: true });
+  window.addEventListener('resize', hideTip, { passive: true });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hideTip();
+  });
 
   // ---- DOM ----------------------------------------------------------------
   function headline() {
@@ -198,8 +207,8 @@ export function createViz(root, tooltip) {
     marker.append(bubble, dot);
     marker.hidden = true;
     track.append(marker);
-    const caption = el('p', 'ruler-caption', `等级（1 最低 → ${n} 最高）`);
-    ruler.append(caption, track, ticks);
+    const caption = el('p', 'ruler-caption', `等级：1 最低 → ${n} 最高`);
+    ruler.append(track, ticks, caption);
     refs.rulerFill = fill;
     refs.marker = marker;
     refs.bubble = bubble;
@@ -244,6 +253,9 @@ export function createViz(root, tooltip) {
     }
   }
 
+  // Percentages are only shown when the API returned real probabilities.
+  const valueText = (res, pct, k) => (res?.estimated ? '—' : pctText(Math.round(pct * k)));
+
   function paintSplit(res, k) {
     const its = res ? res.items : items.map((it) => ({ ...it, share: 0, pct: 0 }));
     // Duel: the two sides grow toward each other from opposite ends.
@@ -252,8 +264,8 @@ export function createViz(root, tooltip) {
       const gap = a.share > 0 && b.share > 0 ? 1 : 0;
       setSeg(refs.segs[0], a, { left: '0', width: `calc(${a.share * k * 100}% - ${gap}px)` });
       setSeg(refs.segs[1], b, { right: '0', width: `calc(${b.share * k * 100}% - ${gap}px)` });
-      refs.duel[0].textContent = pctText(Math.round(a.pct * k));
-      refs.duel[1].textContent = pctText(Math.round(b.pct * k));
+      refs.duel[0].textContent = valueText(res, a.pct, k);
+      refs.duel[1].textContent = valueText(res, b.pct, k);
     } else {
       // Stacked: the whole stack grows from the left, with a 2px surface gap between segments.
       const visible = its.map((it, i) => (it.share > 0 ? i : -1)).filter((i) => i >= 0);
@@ -275,7 +287,7 @@ export function createViz(root, tooltip) {
         cum += it.share;
       });
     }
-    paintRows(its, k);
+    paintRows(res, its, k);
   }
 
   function setSeg(seg, it, geo) {
@@ -284,28 +296,31 @@ export function createViz(root, tooltip) {
       seg.tabIndex = -1;
       return;
     }
+    const text = result?.estimated ? 'Jev 的选择' : pctText(it.pct);
     seg.hidden = false;
     seg.style.left = geo.left ?? 'auto';
     seg.style.right = geo.right ?? 'auto';
     seg.style.width = geo.width;
-    seg.dataset.tipValue = pctText(it.pct);
-    seg.setAttribute('aria-label', `${it.label}：${it.pct}%`);
-    seg.tabIndex = 0;
+    seg.dataset.tipValue = text;
+    seg.setAttribute('aria-label', `${it.label}：${text}`);
+    // Slivers under 1% are too thin to show a focus ring; their value is in the rows below.
+    seg.tabIndex = it.pct >= 1 ? 0 : -1;
   }
 
-  function paintRows(its, k) {
+  function paintRows(res, its, k) {
     its.forEach((it, i) => {
       const r = refs.rows?.[i];
       if (!r) return;
       r.fill.style.width = `${(it.share ?? 0) * k * 100}%`;
-      r.value.textContent = pctText(Math.round((it.pct ?? 0) * k));
+      r.value.textContent = valueText(res, it.pct ?? 0, k);
     });
   }
 
   function paintScore(res, k) {
     const its = res ? res.items : items.map((it) => ({ ...it, share: 0, pct: 0 }));
-    paintRows(its, k);
-    if (!res) {
+    paintRows(res, its, k);
+    // At k = 0 (preview, or shrunk while a new call runs) there is no score to mark.
+    if (!res || k === 0) {
       refs.marker.hidden = true;
       refs.rulerFill.style.width = '0%';
       return;
@@ -318,12 +333,15 @@ export function createViz(root, tooltip) {
   }
 
   // ---- result text --------------------------------------------------------
+  const IDLE_HEADLINE = ['还没有结果', '填好问题和选项，点「发起调用」后，概率会从 0 开始长出来。'];
+
   function setHeadline(res) {
     if (!res) {
-      refs.headMain.textContent = '还没有结果';
-      refs.headSub.textContent = '填好问题和选项，点「发起调用」后，概率会从 0 开始长出来。';
+      [refs.headMain.textContent, refs.headSub.textContent] = IDLE_HEADLINE;
       return;
     }
+    const confText =
+      res.confidence == null ? '' : `置信度 ${Math.round(res.confidence * 100)}%（${describeConfidence(res.confidence)}）`;
     if (res.type === 'noul') {
       const d = describeNoul(res.probability);
       refs.headMain.textContent = `Jev 判断：${d.text}`;
@@ -331,14 +349,15 @@ export function createViz(root, tooltip) {
     } else if (res.type === 'choice') {
       const win = res.items.find((it) => it.key === res.winner);
       refs.headMain.textContent = `Jev 的选择：${win ? win.label : res.winner}`;
-      refs.headSub.textContent =
-        res.confidence == null
-          ? `概率 ${win?.pct ?? 0}%`
-          : `概率 ${win?.pct ?? 0}% · 置信度 ${Math.round(res.confidence * 100)}%（${describeConfidence(res.confidence)}）`;
+      const parts = res.estimated ? ['接口没有返回各选项的概率，条形图只标出 Jev 的选择'] : [`概率 ${win?.pct ?? 0}%`];
+      if (confText) parts.push(confText);
+      refs.headSub.textContent = parts.join(' · ');
     } else {
       const near = res.items[Math.round(res.score)];
       refs.headMain.textContent = `得分 ${(res.score + 1).toFixed(2)} / ${res.max + 1}`;
-      refs.headSub.textContent = `最接近第 ${Math.round(res.score) + 1} 档：${near?.label ?? ''}`;
+      const parts = [`最接近第 ${Math.round(res.score) + 1} 档：${near?.label ?? ''}`];
+      if (res.estimated) parts.push('接口没有返回各档的概率');
+      refs.headSub.textContent = parts.join(' · ');
     }
   }
 
@@ -391,11 +410,14 @@ export function createViz(root, tooltip) {
 
   const signature = () => signatureOf(type, items);
 
-  function clear() {
+  // Back to the 0% preview. An optional [main, sub] headline replaces the idle
+  // instructions, e.g. to point at an error shown below.
+  function clear(message) {
     anim?.cancel();
     result = null;
     setBadges(null);
     setHeadline(null);
+    if (message) [refs.headMain.textContent, refs.headSub.textContent] = message;
     root.classList.remove('has-result');
     paint(0);
   }
