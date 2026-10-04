@@ -564,6 +564,30 @@ textarea:focus-visible {
   border-radius: 999px;
   background: var(--surface-2);
 }
+/* An action, not an example: dashed outline like the other "edit the form" buttons. */
+.chip-clear {
+  background: transparent;
+  border-style: dashed;
+}
+
+/* Short-lived status text with an optional action, e.g. "已清空 撤销". */
+.inline-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
 
 /* ---- option editors ------------------------------------------------------ */
 
@@ -724,8 +748,33 @@ textarea:focus-visible {
 }
 
 .kbd-hint {
+  margin-left: auto;
   font-size: 12.5px;
   color: var(--ink-3);
+}
+
+/* Secondary and destructive: quiet at rest, red on hover so the effect is clear. */
+.primary-btn,
+.secondary-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.secondary-btn {
+  height: 42px;
+  padding: 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+}
+.secondary-btn:hover {
+  color: var(--danger-ink);
+  border-color: var(--danger);
+  background: var(--danger-soft);
 }
 kbd {
   font-size: 11.5px;
@@ -1332,6 +1381,9 @@ kbd {
   }
   .primary-btn {
     width: 100%;
+  }
+  .submit-row .inline-notice {
+    justify-content: center;
   }
   .kbd-hint {
     display: none;

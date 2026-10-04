@@ -24,10 +24,13 @@ import {
 } from './core.js';
 import { createViz, signatureOf } from './viz.js';
 
+// Every key this page stores starts with STORE_PREFIX (theme.js reads THEME_STORE too).
+const STORE_PREFIX = 'simple-jev:';
 const FORM_STORE = 'simple-jev:form:v2';
 const LEGACY_FORM_STORE = 'simple-jev:form';
 const KEY_STORE = 'simple-jev:key';
 const THEME_STORE = 'simple-jev:theme';
+const CACHE_CLEARED_HASH = '#cache-cleared';
 const CUSTOM_MODEL = '__custom';
 const REQUEST_TIMEOUT_MS = 60_000;
 
@@ -54,6 +57,18 @@ const storage = {
       localStorage.removeItem(key);
     } catch {
       // Ignore.
+    }
+  },
+  // Removes every key that starts with `prefix`, leaving other sites' data alone.
+  removeAll(prefix) {
+    for (const area of ['localStorage', 'sessionStorage']) {
+      try {
+        const store = window[area];
+        const keys = Array.from({ length: store.length }, (_, i) => store.key(i));
+        for (const key of keys) if (key?.startsWith(prefix)) store.removeItem(key);
+      } catch {
+        // Storage unavailable: nothing was saved there.
+      }
     }
   },
 };
@@ -91,6 +106,10 @@ const toChoice = (list) =>
   list.slice(0, LIMITS.choice.max).map((o, i) => ({ id: newId(), name: String(o.name ?? ''), desc: String(o.desc ?? ''), slot: i + 1 }));
 const toScore = (list) => list.slice(0, LIMITS.score.max).map((l) => ({ id: newId(), text: String(l.text ?? '') }));
 
+// Blank option rows, as on a first visit: two choices, three score levels.
+const blankChoice = () => toChoice(PLACEHOLDER_EXAMPLE.choice.map(() => ({})));
+const blankScore = () => toScore([{}, {}, {}]);
+
 // An empty form: the example question and options appear only as grey
 // placeholders, so typing replaces them rather than editing them.
 function initialState() {
@@ -101,8 +120,8 @@ function initialState() {
     question: '',
     context: '',
     noul: { trueText: '', falseText: '' },
-    choice: toChoice(PLACEHOLDER_EXAMPLE.choice.map(() => ({}))),
-    score: toScore([{}, {}, {}]),
+    choice: blankChoice(),
+    score: blankScore(),
   };
 }
 
@@ -336,6 +355,16 @@ for (const radio of form.elements.type) {
   });
 }
 
+// The example chips, then the clear button and its undo notice. The notice sits
+// right before the question input, so Shift+Tab from there reaches 撤销.
+const clearBtn = el('button', 'chip chip-clear', '清空');
+clearBtn.type = 'button';
+clearBtn.title = '清空问题、背景内容和所有选项';
+clearBtn.setAttribute('aria-label', '清空问题、背景内容和所有选项');
+clearBtn.addEventListener('click', () => clearInputs());
+const clearNotice = el('span', 'inline-notice');
+clearNotice.setAttribute('role', 'status');
+
 function renderExamples() {
   const box = $('examples');
   box.replaceChildren(
@@ -345,10 +374,70 @@ function renderExamples() {
       btn.addEventListener('click', () => loadExample(ex));
       return btn;
     }),
+    clearBtn,
+    clearNotice,
   );
 }
 
+let undoTimer = null;
+
+function dismissUndo() {
+  clearTimeout(undoTimer);
+  if (!clearNotice.firstChild) return;
+  const hadFocus = clearNotice.contains(document.activeElement);
+  clearNotice.replaceChildren();
+  if (hadFocus) clearBtn.focus();
+}
+
+// Empties the question, background and the options of every question type, back
+// to blank rows as on a first visit. Connection settings (Base URL, key, model)
+// and the chosen type stay. 撤销 is offered until the next edit or 8 seconds.
+function clearInputs() {
+  const blank = {
+    question: '',
+    context: '',
+    noul: { trueText: '', falseText: '' },
+    choice: blankChoice(),
+    score: blankScore(),
+  };
+  const content = (s) =>
+    JSON.stringify([s.question, s.context, s.noul, s.choice.map((o) => [o.name, o.desc]), s.score.map((l) => l.text)]);
+  // Already blank (e.g. a double click): keep any pending undo of the real content.
+  if (content(state) === content(blank)) {
+    questionInput.focus();
+    return;
+  }
+  const before = {
+    question: state.question,
+    context: state.context,
+    noul: { ...state.noul },
+    choice: state.choice.map((o) => ({ ...o })),
+    score: state.score.map((l) => ({ ...l })),
+  };
+  Object.assign(state, blank);
+  renderAll();
+  saveState();
+  questionInput.focus();
+
+  const undo = el('button', 'link-btn', '撤销');
+  undo.type = 'button';
+  undo.addEventListener('click', () => {
+    Object.assign(state, before);
+    renderAll();
+    saveState();
+    dismissUndo();
+    questionInput.focus();
+  });
+  clearNotice.replaceChildren('已清空', undo);
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(dismissUndo, 8000);
+}
+
+// Any edit after clearing retires the undo, so it can never overwrite new input.
+form.addEventListener('input', dismissUndo);
+
 function loadExample(ex) {
+  dismissUndo();
   state.type = ex.type;
   state.question = ex.question;
   state.context = ex.context ?? '';
@@ -866,6 +955,26 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// ---- clear cache ----------------------------------------------------------
+
+// Forgets everything this page saved in the browser (form, remembered key, theme)
+// and reloads, so the page is exactly as on a first visit. It sits next to the
+// main button and drops the saved key, so it asks first.
+function clearCache() {
+  const ok = window.confirm(
+    '确定要清除缓存吗？\n\n这会删除本页保存在浏览器里的所有内容：输入的问题和选项、Base URL、模型、主题设置，以及记住的 API Key。清除后页面会刷新，和第一次打开时一样。',
+  );
+  if (!ok) return;
+  // A save still waiting on its debounce would write the data straight back.
+  saveState.cancel();
+  saveKey.cancel();
+  storage.removeAll(STORE_PREFIX);
+  history.replaceState(null, '', `${location.pathname}${location.search}${CACHE_CLEARED_HASH}`);
+  location.reload();
+}
+
+$('clear-cache').addEventListener('click', clearCache);
+
 // ---- boot ----------------------------------------------------------------
 
 function renderAll() {
@@ -883,10 +992,17 @@ function renderAll() {
 }
 
 applyTheme(['light', 'dark'].includes(storage.get(THEME_STORE)) ? storage.get(THEME_STORE) : 'auto');
+// Set both explicitly: some browsers restore typed values and checkboxes on reload,
+// which would bring a key (or the remember box) back after clearing the cache.
 const savedKey = storage.get(KEY_STORE);
-if (savedKey) {
-  keyInput.value = savedKey;
-  rememberKey.checked = true;
-}
+keyInput.value = savedKey ?? '';
+rememberKey.checked = Boolean(savedKey);
 renderExamples();
 renderAll();
+
+if (location.hash === CACHE_CLEARED_HASH) {
+  history.replaceState(null, '', `${location.pathname}${location.search}`);
+  const notice = $('cache-notice');
+  notice.textContent = '✓ 缓存已清除';
+  setTimeout(() => (notice.textContent = ''), 6000);
+}
