@@ -88,8 +88,22 @@ export function buildState(context, question) {
 
 const clean = (s) => String(s ?? '').trim();
 
-// Options as the user sees them, before any validation. Used for the 0% preview
-// and to label results, so blank names get a readable placeholder.
+// Grey placeholder text for a blank option row. The first choice rows echo the
+// placeholder example (活 / 死), later rows just number themselves; score rows
+// describe their position. The same text labels blank rows in the 0% preview.
+export function choiceHint(i) {
+  const ex = PLACEHOLDER_EXAMPLE.choice[i];
+  return ex ? { name: ex.name, desc: ex.desc } : { name: `选项 ${i + 1}`, desc: '' };
+}
+
+export function scoreHint(i, n) {
+  if (i === 0) return '最低一档';
+  if (i === n - 1) return '最高一档';
+  return `第 ${i + 1} 档`;
+}
+
+// Options as the user sees them, before any validation, for the 0% preview.
+// Blank rows show their placeholder text, flagged with `isHint`.
 export function displayItems(type, form) {
   if (type === 'noul') {
     return [
@@ -98,18 +112,26 @@ export function displayItems(type, form) {
     ];
   }
   if (type === 'choice') {
-    return (form.choice ?? []).map((opt, i) => ({
-      key: clean(opt.name),
-      label: clean(opt.name) || `选项 ${i + 1}`,
-      desc: clean(opt.desc),
-      slot: opt.slot ?? i + 1,
-    }));
+    return (form.choice ?? []).map((opt, i) => {
+      const name = clean(opt.name);
+      const hint = choiceHint(i);
+      return {
+        key: name,
+        label: name || hint.name,
+        // Only an untouched row borrows the example's description.
+        desc: clean(opt.desc) || (name ? '' : hint.desc),
+        slot: opt.slot ?? i + 1,
+        isHint: !name,
+      };
+    });
   }
-  return (form.score ?? []).map((level, i) => ({
+  const levels = form.score ?? [];
+  return levels.map((level, i) => ({
     key: String(i),
-    label: clean(level.text) || `第 ${i + 1} 档`,
+    label: clean(level.text) || scoreHint(i, levels.length),
     desc: '',
     slot: 1,
+    isHint: !clean(level.text),
   }));
 }
 
@@ -461,3 +483,24 @@ export const EXAMPLES = [
     score: [{ text: '非常负面' }, { text: '偏负面' }, { text: '中性' }, { text: '偏正面' }, { text: '非常正面' }],
   },
 ];
+
+// The first example doubles as grey placeholder text in an empty form. It is never
+// filled in as real values, so typing a question replaces it instead of editing it.
+export const PLACEHOLDER_EXAMPLE = EXAMPLES[0];
+
+const LEGACY_DEFAULT_SCORE = ['低', '中', '高'];
+
+// The first version of the page saved the placeholder example (and 低/中/高 score
+// levels) as real form values. Clear those untouched defaults so they show as
+// placeholders, and keep everything the user actually typed or chose.
+export function migrateLegacyForm(saved) {
+  if (!saved || typeof saved !== 'object') return null;
+  const ex = PLACEHOLDER_EXAMPLE;
+  const same = (rows, ref, eq) =>
+    Array.isArray(rows) && rows.length === ref.length && rows.every((r, i) => eq(r ?? {}, ref[i]));
+  const out = { ...saved };
+  if (out.question === ex.question) out.question = '';
+  if (same(out.choice, ex.choice, (r, e) => r.name === e.name && (r.desc ?? '') === e.desc)) out.choice = [];
+  if (same(out.score, LEGACY_DEFAULT_SCORE, (r, text) => r.text === text)) out.score = [];
+  return out;
+}

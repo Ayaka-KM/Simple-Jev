@@ -155,7 +155,8 @@ export function createViz(root, tooltip) {
       }
       const text = el('div', 'row-text');
       const labelLine = el('div', 'row-label-line');
-      labelLine.append(el('span', 'row-label', it.label));
+      // Labels taken from grey placeholder text stay grey here too.
+      labelLine.append(el('span', `row-label${it.isHint ? ' is-hint' : ''}`, it.label));
       const badge = el('span', 'row-badge');
       badge.hidden = true;
       labelLine.append(badge);
@@ -180,7 +181,7 @@ export function createViz(root, tooltip) {
         const head = el('div', 'duel-head');
         const sw = el('span', `swatch s${it.slot}`);
         sw.setAttribute('aria-hidden', 'true');
-        head.append(sw, el('span', 'duel-label', it.label));
+        head.append(sw, el('span', `duel-label${it.isHint ? ' is-hint' : ''}`, it.label));
         const value = el('span', 'duel-value', '0%');
         side.append(head, value);
         duel.append(side);

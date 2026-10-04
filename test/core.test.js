@@ -2,13 +2,16 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  PLACEHOLDER_EXAMPLE,
   QUESTION_KEY,
   buildCurl,
   buildRequest,
   buildState,
+  choiceHint,
   describeNoul,
   displayItems,
   formatUsd,
+  migrateLegacyForm,
   normalizeKey,
   parseError,
   readAnswer,
@@ -200,10 +203,90 @@ describe('buildRequest', () => {
 });
 
 describe('displayItems', () => {
-  it('labels blank rows so the preview stays readable', () => {
-    const items = displayItems('choice', { choice: [{ name: '', desc: '', slot: 3 }] });
-    assert.deepEqual(items, [{ key: '', label: '选项 1', desc: '', slot: 3 }]);
-    assert.equal(displayItems('score', { score: [{ text: '' }] })[0].label, '第 1 档');
+  it('labels blank rows with their grey placeholder text, flagged as hints', () => {
+    const items = displayItems('choice', {
+      choice: [
+        { name: '', desc: '', slot: 1 },
+        { name: '生', desc: '', slot: 2 },
+        { name: '', desc: '', slot: 3 },
+      ],
+    });
+    assert.deepEqual(items, [
+      { key: '', label: '活', desc: '猫是活的', slot: 1, isHint: true },
+      // A typed name does not borrow the example's description.
+      { key: '生', label: '生', desc: '', slot: 2, isHint: false },
+      { key: '', label: '选项 3', desc: '', slot: 3, isHint: true },
+    ]);
+    assert.deepEqual(
+      displayItems('score', { score: [{ text: '' }, { text: '中' }, { text: '' }] }).map((it) => [it.label, it.isHint]),
+      [
+        ['最低一档', true],
+        ['中', false],
+        ['最高一档', true],
+      ],
+    );
+  });
+
+  it('takes the choice placeholders from the placeholder example', () => {
+    assert.deepEqual(choiceHint(0), { name: PLACEHOLDER_EXAMPLE.choice[0].name, desc: PLACEHOLDER_EXAMPLE.choice[0].desc });
+    assert.equal(PLACEHOLDER_EXAMPLE.question, '薛定谔的猫是活的还是死的？');
+  });
+
+  it('never sends placeholder text: a blank form fails validation', () => {
+    const r = buildRequest({
+      model: 'typesafe/jev-1.13',
+      type: 'choice',
+      question: '',
+      choice: [{ name: '' }, { name: '' }],
+    });
+    assert.equal(r.ok, false);
+    assert.deepEqual([...new Set(r.errors.map((e) => e.field))].sort(), ['options', 'question']);
+  });
+});
+
+describe('migrateLegacyForm', () => {
+  const legacy = {
+    baseUrl: 'https://proxy.example/api',
+    model: '~typesafe/jev-latest',
+    type: 'choice',
+    question: '薛定谔的猫是活的还是死的？',
+    context: '',
+    noul: { trueText: '', falseText: '' },
+    choice: [
+      { name: '活', desc: '猫是活的' },
+      { name: '死', desc: '猫是死的' },
+    ],
+    score: [{ text: '低' }, { text: '中' }, { text: '高' }],
+  };
+
+  it('clears the untouched example values and keeps the settings', () => {
+    const out = migrateLegacyForm(legacy);
+    assert.equal(out.question, '');
+    assert.deepEqual(out.choice, []);
+    assert.deepEqual(out.score, []);
+    assert.equal(out.baseUrl, 'https://proxy.example/api');
+    assert.equal(out.model, '~typesafe/jev-latest');
+  });
+
+  it('keeps anything the user changed', () => {
+    const out = migrateLegacyForm({
+      ...legacy,
+      question: '明天会下雨吗？',
+      choice: [
+        { name: '活', desc: '猫是活的' },
+        { name: '死', desc: '猫是死的' },
+        { name: '叠加态', desc: '' },
+      ],
+      score: [{ text: '低' }, { text: '高' }],
+    });
+    assert.equal(out.question, '明天会下雨吗？');
+    assert.equal(out.choice.length, 3);
+    assert.equal(out.score.length, 2);
+  });
+
+  it('ignores junk', () => {
+    assert.equal(migrateLegacyForm(null), null);
+    assert.equal(migrateLegacyForm('x'), null);
   });
 });
 

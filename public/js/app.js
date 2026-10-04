@@ -6,21 +6,26 @@ import {
   EXAMPLES,
   LIMITS,
   MODELS,
+  PLACEHOLDER_EXAMPLE,
   TYPES,
   buildCurl,
   buildRequest,
+  choiceHint,
   displayItems,
   formatUsd,
   isAnswerShapeError,
+  migrateLegacyForm,
   normalizeKey,
   parseError,
   readAnswer,
   resolveEndpoint,
+  scoreHint,
   validateKey,
 } from './core.js';
 import { createViz, signatureOf } from './viz.js';
 
-const FORM_STORE = 'simple-jev:form';
+const FORM_STORE = 'simple-jev:form:v2';
+const LEGACY_FORM_STORE = 'simple-jev:form';
 const KEY_STORE = 'simple-jev:key';
 const THEME_STORE = 'simple-jev:theme';
 const CUSTOM_MODEL = '__custom';
@@ -75,8 +80,6 @@ function el(tag, className, text) {
 let uid = 0;
 const newId = () => `opt${++uid}`;
 
-const DEFAULT_SCORE = [{ text: '低' }, { text: '中' }, { text: '高' }];
-
 function nextSlot(list) {
   const used = new Set(list.map((o) => o.slot));
   let slot = 1;
@@ -88,26 +91,44 @@ const toChoice = (list) =>
   list.slice(0, LIMITS.choice.max).map((o, i) => ({ id: newId(), name: String(o.name ?? ''), desc: String(o.desc ?? ''), slot: i + 1 }));
 const toScore = (list) => list.slice(0, LIMITS.score.max).map((l) => ({ id: newId(), text: String(l.text ?? '') }));
 
+// An empty form: the example question and options appear only as grey
+// placeholders, so typing replaces them rather than editing them.
 function initialState() {
-  const ex = EXAMPLES[0];
   return {
     baseUrl: DEFAULT_BASE_URL,
     model: DEFAULT_MODEL,
-    type: ex.type,
-    question: ex.question,
-    context: ex.context,
+    type: PLACEHOLDER_EXAMPLE.type,
+    question: '',
+    context: '',
     noul: { trueText: '', falseText: '' },
-    choice: toChoice(ex.choice),
-    score: toScore(DEFAULT_SCORE),
+    choice: toChoice(PLACEHOLDER_EXAMPLE.choice.map(() => ({}))),
+    score: toScore([{}, {}, {}]),
   };
+}
+
+// The saved form, moving a first-version save (which stored the placeholder
+// example as real values) to the current key on the way.
+function readSavedForm() {
+  const raw = storage.get(FORM_STORE);
+  if (raw) return JSON.parse(raw);
+  const legacy = storage.get(LEGACY_FORM_STORE);
+  if (!legacy) return null;
+  let migrated = null;
+  try {
+    migrated = migrateLegacyForm(JSON.parse(legacy));
+  } catch {
+    // Unreadable old save: drop it.
+  }
+  if (migrated) storage.set(FORM_STORE, JSON.stringify(migrated));
+  storage.remove(LEGACY_FORM_STORE);
+  return migrated;
 }
 
 function loadState() {
   const base = initialState();
-  const raw = storage.get(FORM_STORE);
-  if (!raw) return base;
   try {
-    const s = JSON.parse(raw);
+    const s = readSavedForm();
+    if (!s || typeof s !== 'object') return base;
     const str = (v, d) => (typeof v === 'string' ? v : d);
     return {
       baseUrl: str(s.baseUrl, base.baseUrl),
@@ -284,9 +305,11 @@ modelCustom.addEventListener('input', () => {
 
 // ---- question fields -----------------------------------------------------
 
+// Echoes the question above the result; an empty form echoes the grey placeholder.
 function renderQuestionEcho() {
   const q = (shownQuestion ?? state.question).trim();
-  resultQuestion.textContent = q ? `问：${q}` : '';
+  resultQuestion.textContent = `问：${q || PLACEHOLDER_EXAMPLE.question}`;
+  resultQuestion.classList.toggle('is-hint', !q);
 }
 
 questionInput.addEventListener('input', () => {
@@ -361,14 +384,15 @@ function renderChoiceList() {
       name.autocomplete = 'off';
       name.value = opt.name;
       name.dataset.field = 'name';
-      name.placeholder = i === 0 ? '选项名，如：活' : i === 1 ? '选项名，如：死' : '选项名';
+      const hint = choiceHint(i);
+      name.placeholder = hint.name;
       name.setAttribute('aria-label', `选项 ${i + 1} 名称`);
       const desc = el('input', 'opt-desc');
       desc.type = 'text';
       desc.autocomplete = 'off';
       desc.value = opt.desc;
       desc.dataset.field = 'desc';
-      desc.placeholder = '说明（选填）：什么情况选它';
+      desc.placeholder = hint.desc || '说明（选填）：什么情况选它';
       desc.setAttribute('aria-label', `选项 ${i + 1} 说明`);
       const remove = iconButton(`删除选项 ${i + 1}`, '×', 'remove');
       remove.classList.add('remove-btn');
@@ -394,7 +418,7 @@ function renderScoreList() {
       text.autocomplete = 'off';
       text.value = lvl.text;
       text.dataset.field = 'text';
-      text.placeholder = i === 0 ? '最低一档' : i === n - 1 ? '最高一档' : `第 ${i + 1} 档`;
+      text.placeholder = scoreHint(i, n);
       text.setAttribute('aria-label', `第 ${i + 1} 档内容`);
       const up = iconButton(`把第 ${i + 1} 档上移`, '↑', 'up');
       up.disabled = i === 0;
@@ -678,10 +702,27 @@ function hideFormErrors() {
   for (const input of document.querySelectorAll('.option-list input[aria-invalid]')) input.removeAttribute('aria-invalid');
 }
 
+// True when a field the errors mention is blank and showing grey example text,
+// which is easy to mistake for a filled-in value.
+function blankFieldShowsHint(errors) {
+  const blank = (v) => !String(v ?? '').trim();
+  return errors.some(
+    (err) =>
+      (err.field === 'question' && blank(state.question)) ||
+      (err.field === 'options' && state.type === 'choice' && state.choice.some((o) => blank(o.name))) ||
+      (err.field === 'options' && state.type === 'score' && state.score.some((l) => blank(l.text))),
+  );
+}
+
 function showFormErrors(errors) {
   const list = el('ul');
   for (const err of errors) list.append(el('li', null, err.message));
   formErrors.replaceChildren(list);
+  if (blankFieldShowsHint(errors)) {
+    formErrors.append(
+      el('p', 'form-errors-note', '输入框里的灰色文字只是示例，需要自己填写；想直接试用，可以点上面「试试示例」里的按钮。'),
+    );
+  }
   formErrors.hidden = false;
   let first = null;
   for (const err of errors) {
@@ -832,6 +873,7 @@ function renderAll() {
   renderEndpoint();
   renderModel();
   for (const radio of form.elements.type) radio.checked = radio.value === state.type;
+  questionInput.placeholder = PLACEHOLDER_EXAMPLE.question;
   questionInput.value = state.question;
   contextInput.value = state.context;
   renderQuestionEcho();
