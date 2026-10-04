@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simple Jev · 可视化调用 Jev 决策模型</title>
+  <meta name="description" content="不用命令行，在浏览器里调用 TypeSafe 的 Jev 决策模型：是/否、单选、打分三种题型，结果以动画概率条显示。">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/js/theme.js"></script>
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="1" y="1" width="30" height="30" rx="8" class="brand-bg"/>
+        <rect x="6" y="13" width="12" height="6" rx="2" class="brand-a"/>
+        <rect x="20" y="13" width="6" height="6" rx="2" class="brand-b"/>
+      </svg>
+      <div>
+        <h1>Simple Jev</h1>
+        <p class="tagline">在浏览器里调用 Jev 决策模型，不用命令行</p>
+      </div>
+    </div>
+    <button type="button" id="theme-toggle" class="icon-btn" aria-label="切换主题：跟随系统">
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="icon icon-auto"><path d="M12 3a9 9 0 1 0 0 18V3Z"/><circle cx="12" cy="12" r="9" fill="none"/></svg>
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="icon icon-light"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" fill="none"/></svg>
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="icon icon-dark"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z"/></svg>
+      <span id="theme-label" class="icon-btn-label">跟随系统</span>
+    </button>
+  </header>
+
+  <main class="layout">
+    <form id="jev-form" class="form-col" novalidate>
+      <section class="card" aria-labelledby="conn-title">
+        <h2 id="conn-title" class="card-title"><span class="step">1</span>连接设置</h2>
+
+        <div class="field">
+          <label for="base-url">Base URL</label>
+          <input id="base-url" name="baseUrl" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://openrouter.ai/api">
+          <p class="hint" id="endpoint-preview" aria-live="polite"></p>
+        </div>
+
+        <div class="field">
+          <label for="api-key">API Key</label>
+          <div class="input-row">
+            <input id="api-key" name="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-or-v1-…" aria-describedby="key-hint">
+            <button type="button" id="toggle-key" class="ghost-btn" aria-pressed="false" aria-controls="api-key">显示</button>
+          </div>
+          <label class="check"><input type="checkbox" id="remember-key"> 在这个浏览器里记住 Key（只在自己的设备上勾选）</label>
+          <p class="hint" id="key-hint">Key 只在你的浏览器和上面的地址之间直接传输，不经过本站服务器。没有 Key？到 <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer">OpenRouter 设置页</a> 生成一个。</p>
+        </div>
+
+        <div class="field">
+          <label for="model-select">模型</label>
+          <div class="input-row">
+            <select id="model-select"></select>
+            <input id="model-custom" type="text" autocomplete="off" spellcheck="false" placeholder="例如 typesafe/jev-1.13" aria-label="自定义模型名称" hidden>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="type-title">
+        <h2 id="type-title" class="card-title"><span class="step">2</span>选择题型</h2>
+        <div class="type-picker" role="radiogroup" aria-labelledby="type-title">
+          <label class="type-option">
+            <input type="radio" name="type" value="noul">
+            <span class="type-body">
+              <span class="type-name">是 / 否</span>
+              <span class="type-desc">判断一件事是否成立，返回“是”的概率</span>
+            </span>
+          </label>
+          <label class="type-option">
+            <input type="radio" name="type" value="choice">
+            <span class="type-body">
+              <span class="type-name">单选</span>
+              <span class="type-desc">从几个选项里挑一个，返回每个选项的概率</span>
+            </span>
+          </label>
+          <label class="type-option">
+            <input type="radio" name="type" value="score">
+            <span class="type-body">
+              <span class="type-name">打分</span>
+              <span class="type-desc">放到一个从低到高的等级上，返回分数</span>
+            </span>
+          </label>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="q-title">
+        <h2 id="q-title" class="card-title"><span class="step">3</span>输入问题</h2>
+        <div class="examples">
+          <span class="examples-label">试试示例</span>
+          <div id="examples" class="chips"></div>
+        </div>
+        <div class="field">
+          <label for="question">问题 <span class="req">必填</span></label>
+          <input id="question" name="question" type="text" autocomplete="off" placeholder="例如：薛定谔的猫是活的还是死的？">
+        </div>
+        <div class="field">
+          <label for="context">背景内容 <span class="opt">选填</span></label>
+          <textarea id="context" name="context" rows="3" placeholder="要让 Jev 判断的材料，比如一段客户留言。不填就直接拿问题本身来判断。"></textarea>
+          <p class="hint">如果填的是 JSON 对象或数组，会作为结构化数据发送。</p>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="opt-title">
+        <h2 id="opt-title" class="card-title"><span class="step">4</span><span id="opt-title-text">可选答案</span></h2>
+
+        <div id="options-noul" class="options" hidden>
+          <p class="hint">Jev 会给出“是”的概率。下面两项可以不填，填了能让判断标准更明确。</p>
+          <div class="field">
+            <label for="noul-true"><span class="swatch s1" aria-hidden="true"></span>“是”表示 <span class="opt">选填</span></label>
+            <input id="noul-true" type="text" autocomplete="off" placeholder="例如：客户描述了产品出错的行为">
+          </div>
+          <div class="field">
+            <label for="noul-false"><span class="swatch s2" aria-hidden="true"></span>“否”表示 <span class="opt">选填</span></label>
+            <input id="noul-false" type="text" autocomplete="off" placeholder="例如：客户只是在提问或提需求">
+          </div>
+        </div>
+
+        <div id="options-choice" class="options" hidden>
+          <p class="hint">每个选项填一个名称；说明可以不填，填了 Jev 更清楚什么情况该选它。</p>
+          <ol id="choice-list" class="option-list"></ol>
+          <button type="button" id="add-choice" class="add-btn">＋ 添加选项</button>
+        </div>
+
+        <div id="options-score" class="options" hidden>
+          <p class="hint">按<strong>从低到高</strong>的顺序填写每一档，可以用箭头调整顺序。</p>
+          <ol id="score-list" class="option-list"></ol>
+          <button type="button" id="add-score" class="add-btn">＋ 添加档位</button>
+        </div>
+      </section>
+
+      <div id="form-errors" class="form-errors" role="alert" hidden></div>
+
+      <div class="submit-row">
+        <button type="submit" id="submit" class="primary-btn">
+          <span class="spinner" aria-hidden="true"></span>
+          <span class="submit-text">发起调用</span>
+        </button>
+        <span class="kbd-hint"><kbd>Ctrl</kbd> + <kbd>Enter</kbd></span>
+      </div>
+    </form>
+
+    <section class="result-col" aria-labelledby="result-title">
+      <div class="card result-card" id="result-card">
+        <div class="result-head">
+          <h2 id="result-title" class="card-title">结果</h2>
+          <span id="result-status" class="status-chip" data-state="idle">等待调用</span>
+        </div>
+        <p id="result-question" class="result-question"></p>
+        <div id="viz" class="viz"></div>
+
+        <div id="result-error" class="result-error" hidden>
+          <p class="error-title"></p>
+          <p class="error-hint"></p>
+          <pre class="error-detail"></pre>
+        </div>
+
+        <dl id="result-meta" class="meta" hidden></dl>
+
+        <details id="raw" class="raw" hidden>
+          <summary>查看原始请求和响应</summary>
+          <div class="raw-block">
+            <div class="raw-head"><span>请求 JSON</span><button type="button" class="copy-btn" data-copy="raw-request">复制</button></div>
+            <pre id="raw-request"></pre>
+          </div>
+          <div class="raw-block">
+            <div class="raw-head"><span>等价的 curl 命令</span><button type="button" class="copy-btn" data-copy="raw-curl">复制</button></div>
+            <pre id="raw-curl"></pre>
+          </div>
+          <div class="raw-block">
+            <div class="raw-head"><span>响应 JSON</span><button type="button" class="copy-btn" data-copy="raw-response">复制</button></div>
+            <pre id="raw-response"></pre>
+          </div>
+        </details>
+      </div>
+
+      <aside class="card about">
+        <h2 class="card-title">关于 Jev</h2>
+        <p>Jev 是 TypeSafe 的<strong>决策模型</strong>：它不写文字、不解释理由，只在你给定的选项之间分配概率。答案好不好，很大程度取决于选项怎么写。</p>
+        <p class="hint">按输入 token 计费，输出免费；一次调用通常不到 $0.0001。<a href="https://openrouter.ai/docs/guides/community/jev" target="_blank" rel="noopener noreferrer">查看官方文档</a></p>
+      </aside>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Simple Jev · 本站服务器不接收也不保存你的数据；表单内容只保存在你自己的浏览器里。</p>
+  </footer>
+
+  <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+</body>
+</html>

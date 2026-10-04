@@ -1,0 +1,15 @@
+{
+  "name": "simple-jev",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A browser page for calling the Jev decision model without the command line, deployed on Cloudflare Workers.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "wrangler": "^4.147.0"
+  }
+}

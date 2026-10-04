@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Must match the Worker's name in the Cloudflare dashboard when using Workers Builds.
+  "name": "simple-jev",
+  "compatibility_date": "2026-09-01",
+  // Static site only: the browser calls the Jev API directly, so no Worker script is needed.
+  "assets": {
+    "directory": "./public"
+  }
+}
