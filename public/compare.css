@@ -1,0 +1,1201 @@
+/* Model comparison page (compare.html). Page-only styles: every color is a token
+   from styles.css, so light and dark themes come for free. All classes are cmp-*
+   so they never collide with the tool page. Luna = series 1, Jev = series 2. */
+
+/* ---- header -------------------------------------------------------------- */
+
+.cmp-skip {
+  position: absolute;
+  left: 16px;
+  top: -60px;
+  z-index: 60;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--ink-1);
+  color: var(--surface);
+  font-size: 14px;
+  text-decoration: none;
+}
+.cmp-skip:focus {
+  top: 12px;
+}
+
+.cmp-brand {
+  color: inherit;
+  text-decoration: none;
+  border-radius: 12px;
+}
+.cmp-brand-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.cmp-brand-name {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  color: var(--ink-1);
+}
+.cmp-brand:hover .cmp-brand-name {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
+.cmp-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.cmp-back {
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.cmp-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ---- page grid: hero, table of contents, body ----------------------------- */
+
+.cmp-layout {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 12px 24px 32px;
+  display: grid;
+  grid-template-columns: minmax(0, 860px);
+  grid-template-areas:
+    "hero"
+    "toc"
+    "body";
+  justify-content: center;
+  row-gap: 20px;
+}
+.cmp-hero { grid-area: hero; }
+.cmp-toc { grid-area: toc; }
+.cmp-body {
+  grid-area: body;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* ---- hero ---------------------------------------------------------------- */
+
+.cmp-hero {
+  padding: 12px 0 4px;
+  min-width: 0;
+}
+.cmp-eyebrow {
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  color: var(--accent-ink);
+}
+.cmp-title {
+  margin-top: 6px;
+  font-size: 32px;
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+.cmp-dateline {
+  margin-top: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.cmp-lede {
+  margin-top: 4px;
+  font-size: 14.5px;
+  color: var(--ink-2);
+  max-width: 46em;
+}
+
+.cmp-key {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+.cmp-key li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 13.5px;
+}
+.cmp-key-full {
+  color: var(--ink-3);
+}
+.cmp-key li.cmp-key-note {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+/* The series key: a small colored square beside the text, never colored text. */
+.cmp-dot {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 3px;
+  background: var(--c, var(--ink-3));
+  vertical-align: 0.02em;
+}
+.cmp-key .cmp-dot,
+.cmp-tile-name .cmp-dot,
+.cmp-pick-title .cmp-dot,
+.cmp-model .cmp-dot {
+  margin-right: 0;
+}
+.is-luna { --c: var(--s1); }
+.is-jev { --c: var(--s2); }
+
+/* ---- table of contents --------------------------------------------------- */
+
+.cmp-toc {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 20px 18px;
+  min-width: 0;
+}
+.cmp-toc-title {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink-3);
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+.cmp-toc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: toc;
+  columns: 2;
+  column-gap: 24px;
+}
+.cmp-toc-list li {
+  counter-increment: toc;
+  break-inside: avoid;
+}
+.cmp-toc-list a {
+  display: flex;
+  gap: 10px;
+  padding: 4px 8px;
+  margin: 0 -8px;
+  border-radius: 8px;
+  color: var(--ink-2);
+  text-decoration: none;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.cmp-toc-list a::before {
+  content: counter(toc);
+  flex-shrink: 0;
+  min-width: 1.4em;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.cmp-toc-list a:hover {
+  color: var(--ink-1);
+  background: var(--surface-2);
+}
+.cmp-toc-list a[aria-current="true"] {
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+.cmp-toc-list a[aria-current="true"]::before {
+  color: var(--accent-ink);
+}
+
+/* Wide screens: the contents become a sticky sidebar left of the reading column. */
+@media (min-width: 1140px) {
+  .cmp-layout {
+    grid-template-columns: 220px minmax(0, 860px);
+    grid-template-areas:
+      "toc hero"
+      "toc body";
+    grid-template-rows: auto 1fr;
+    justify-content: space-between;
+    column-gap: 40px;
+  }
+  .cmp-toc {
+    position: sticky;
+    top: 20px;
+    align-self: start;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    margin-top: 16px;
+    padding: 4px 0 4px 2px;
+    background: none;
+    border: 0;
+    box-shadow: none;
+  }
+  .cmp-toc-title {
+    padding-left: 10px;
+  }
+  .cmp-toc-list {
+    columns: 1;
+  }
+  .cmp-toc-list a {
+    margin: 0;
+    padding: 5px 10px;
+    font-size: 13.5px;
+  }
+}
+
+/* ---- sections ------------------------------------------------------------ */
+
+.cmp-section {
+  padding: 26px 30px 22px;
+  scroll-margin-top: 16px;
+  font-size: 15px;
+  line-height: 1.75;
+}
+/* Flow spacing: every block after the first gets the same gap; the specific
+   components below (headings, tables, callouts…) override it. */
+.cmp-section > * + *,
+.cmp-callout-body > * + *,
+.cmp-aside > * + * {
+  margin-top: 12px;
+}
+.cmp-callout-body > * + *,
+.cmp-aside > * + * {
+  margin-top: 8px;
+}
+
+.cmp-h2 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+.cmp-num {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--ink-1);
+  color: var(--surface);
+  font-size: 13.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.cmp-h3 {
+  margin: 26px 0 10px;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.cmp-list {
+  margin: 10px 0 0;
+  padding-left: 1.25em;
+}
+.cmp-list li + li {
+  margin-top: 6px;
+}
+.cmp-list li::marker {
+  color: var(--ink-3);
+}
+
+.cmp-section strong {
+  font-weight: 650;
+}
+
+.cmp-section code {
+  font-size: 0.86em;
+  padding: 0.08em 0.36em;
+  border-radius: 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  color: var(--ink-1);
+  overflow-wrap: anywhere;
+}
+
+.cmp-code {
+  margin: 10px 0 0;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.cmp-section .cmp-code code {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: inherit;
+  overflow-wrap: normal;
+}
+
+.cmp-note {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.cmp-cite {
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+.cmp-cite a {
+  color: var(--ink-2);
+}
+.cmp-cite a:hover {
+  color: var(--accent-ink);
+}
+
+/* ---- 1: verdict ---------------------------------------------------------- */
+
+.cmp-summary {
+  font-size: 17px;
+  line-height: 1.7;
+  font-weight: 500;
+}
+
+.cmp-pick {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+.cmp-pick-card {
+  position: relative;
+  min-width: 0;
+  padding: 18px 18px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+/* A colored top edge carries the series identity (the heading also names it). */
+.cmp-pick-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: var(--c);
+}
+.cmp-pick-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+.cmp-pick-card .cmp-list {
+  font-size: 14.5px;
+  line-height: 1.65;
+}
+
+/* ---- callouts ------------------------------------------------------------ */
+
+.cmp-callout {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 18px;
+  padding: 14px 18px 14px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--hairline);
+  border-left-width: 4px;
+  font-size: 14.5px;
+  line-height: 1.7;
+}
+.cmp-callout-icon {
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.cmp-callout-title {
+  font-weight: 700;
+}
+.cmp-callout .cmp-list {
+  margin-top: 6px;
+}
+.cmp-callout.is-warn {
+  background: var(--chip-stale-bg);
+  border-left-color: var(--chip-stale-ink);
+}
+.cmp-callout.is-warn .cmp-callout-icon,
+.cmp-callout.is-warn .cmp-callout-title {
+  color: var(--chip-stale-ink);
+}
+.cmp-callout.is-info {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+}
+.cmp-callout.is-info .cmp-callout-icon,
+.cmp-callout.is-info .cmp-callout-title {
+  color: var(--accent-ink);
+}
+.cmp-callout code {
+  background: var(--surface);
+}
+.cmp-callout a {
+  color: inherit;
+}
+
+.cmp-aside {
+  margin-top: 20px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px dashed var(--line);
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink-2);
+}
+.cmp-aside-title {
+  font-weight: 650;
+  color: var(--ink-1);
+}
+.cmp-aside code {
+  background: var(--surface);
+}
+
+/* ---- tables -------------------------------------------------------------- */
+
+.cmp-table-wrap {
+  position: relative;
+  margin-top: 14px;
+}
+.cmp-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+.cmp-scroll:focus-visible {
+  outline-offset: 2px;
+}
+
+/* A fade on the edge that still has more table to scroll to. */
+.cmp-table-wrap::before,
+.cmp-table-wrap::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  width: 28px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 2;
+}
+.cmp-table-wrap::before {
+  left: 1px;
+  border-radius: 11px 0 0 11px;
+  background: linear-gradient(90deg, var(--surface), transparent);
+}
+.cmp-table-wrap::after {
+  right: 1px;
+  border-radius: 0 11px 11px 0;
+  background: linear-gradient(270deg, var(--surface), transparent);
+}
+.cmp-table-wrap[data-more-left]::before,
+.cmp-table-wrap[data-more-right]::after {
+  opacity: 1;
+}
+.cmp-scroll-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.cmp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+}
+.cmp-table.is-wide {
+  min-width: 540px;
+}
+.cmp-table.is-models {
+  min-width: 720px;
+}
+.cmp-table th,
+.cmp-table td {
+  padding: 10px 14px;
+  text-align: left;
+  vertical-align: top;
+  border-top: 1px solid var(--hairline);
+}
+.cmp-table thead th {
+  border-top: 0;
+  background: var(--surface-2);
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink-2);
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+.cmp-table tbody th {
+  font-weight: 600;
+  color: var(--ink-1);
+  min-width: 7.5em;
+}
+.cmp-table.is-text tbody th {
+  width: 9.5em;
+}
+.cmp-table td {
+  color: var(--ink-1);
+}
+.cmp-table .num {
+  text-align: right;
+}
+.cmp-table td.num {
+  white-space: nowrap;
+}
+.cmp-table .cmp-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--ink-3);
+  white-space: normal;
+}
+.cmp-table thead .cmp-sub {
+  margin-top: 0;
+}
+.cmp-table thead .cmp-dot {
+  margin-right: 6px;
+}
+.cmp-table code {
+  font-size: 12.5px;
+}
+.cmp-table thead code {
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.cmp-table tr.is-highlight > * {
+  background: var(--accent-soft);
+}
+.cmp-table tr.is-muted > * {
+  color: var(--ink-3);
+}
+.cmp-nowrap {
+  white-space: nowrap;
+}
+
+/* ---- comparison bars ----------------------------------------------------- */
+
+.cmp-figure {
+  margin: 16px 0 0;
+  padding: 16px 18px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.cmp-fig-cap {
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+.cmp-fig-sub {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+.cmp-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Room on the right of the longest bar for its value label. */
+  --label-room: 96px;
+}
+.cmp-bars.is-grouped {
+  gap: 14px;
+}
+.cmp-bar-group {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  grid-auto-rows: auto;
+  column-gap: 10px;
+  row-gap: 2px;
+  align-items: center;
+}
+.cmp-bar-group-label {
+  grid-row: 1 / span 2;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.cmp-bar-group .cmp-bar {
+  grid-column: 2;
+}
+.cmp-bar {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+.cmp-bar-name {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.cmp-bar-area {
+  position: relative;
+  height: 16px;
+  margin-right: var(--label-room);
+  border-left: 1px solid var(--line);
+}
+.cmp-bar-fill {
+  position: absolute;
+  left: 0;
+  top: 1px;
+  bottom: 1px;
+  width: var(--w, 0%);
+  min-width: 2px;
+  border-radius: 0 4px 4px 0;
+  background: var(--c);
+}
+.cmp-bar-value {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--w, 0%) + 8px);
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-1);
+}
+
+/* ---- stat tiles (Luna | Jev) --------------------------------------------- */
+
+.cmp-duo {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.cmp-tile {
+  min-width: 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--hairline);
+  background: var(--surface-2);
+}
+.cmp-tile p {
+  margin: 0;
+}
+.cmp-tile-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.cmp-tile .cmp-tile-value {
+  margin-top: 4px;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.cmp-tile-unit {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--ink-2);
+}
+.cmp-tile .cmp-tile-sub {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+.cmp-tile code {
+  background: var(--surface);
+}
+.cmp-section > .cmp-duo + * {
+  margin-top: 14px;
+}
+
+/* ---- 3: question types --------------------------------------------------- */
+
+.cmp-types {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.cmp-type {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.cmp-type p {
+  margin: 0;
+}
+.cmp-type-name {
+  font-size: 15px;
+  font-weight: 650;
+}
+.cmp-type .cmp-type-desc {
+  margin-top: 4px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.cmp-type .cmp-type-ret {
+  margin-top: 8px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+.cmp-type code {
+  background: var(--surface);
+}
+
+/* ---- 10: fact check ------------------------------------------------------ */
+
+.cmp-verdict {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 17px;
+  font-weight: 600;
+}
+.cmp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 12px 2px 8px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+.cmp-badge .cmp-icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.4;
+}
+.cmp-badge.is-false {
+  background: var(--chip-error-bg);
+  color: var(--chip-error-ink);
+}
+
+.cmp-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-size: 11.5px;
+  font-weight: 650;
+  line-height: 19px;
+  vertical-align: 0.08em;
+}
+
+.cmp-timeline {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  border-left: 2px solid var(--track);
+  margin-left: 6px;
+}
+.cmp-timeline li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 12px;
+  padding: 6px 0 6px 18px;
+}
+.cmp-timeline li::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 14px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--ink-3);
+}
+.cmp-timeline time {
+  padding-top: 4px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.cmp-tl-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.cmp-model {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+.cmp-model code {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 12.5px;
+}
+.cmp-model .cmp-tag {
+  margin-left: 0;
+}
+.cmp-model.is-luna,
+.cmp-model.is-jev {
+  border-color: var(--ink-3);
+  background: var(--surface);
+}
+
+/* ---- 11: in the app ------------------------------------------------------ */
+
+.cmp-steps {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+.cmp-steps li {
+  counter-increment: step;
+  position: relative;
+  padding-left: 36px;
+  font-size: 14.5px;
+  line-height: 1.7;
+}
+.cmp-steps li + li {
+  margin-top: 10px;
+}
+.cmp-steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 1px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--track);
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.cmp-cta-row {
+  margin-top: 18px;
+}
+.cmp-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 12px;
+  background: var(--button);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 650;
+  text-decoration: none;
+  box-shadow: 0 6px 18px -6px rgba(37, 106, 191, 0.55);
+  transition: background-color 0.15s;
+}
+.cmp-cta:hover {
+  background: var(--button-hover);
+}
+
+/* ---- 12: method ---------------------------------------------------------- */
+
+.cmp-tests {
+  margin: 14px 0 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.cmp-tests > div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 16px;
+  scroll-margin-top: 16px;
+  font-size: 14px;
+  line-height: 1.65;
+}
+.cmp-tests > div + div {
+  border-top: 1px solid var(--hairline);
+}
+.cmp-tests > div:target {
+  background: var(--accent-soft);
+}
+.cmp-tests dt {
+  font-weight: 650;
+  white-space: nowrap;
+}
+.cmp-tests dd {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+/* ---- 13: sources --------------------------------------------------------- */
+
+.cmp-sources {
+  margin: 0;
+  padding-left: 1.5em;
+}
+.cmp-sources li {
+  scroll-margin-top: 16px;
+  padding: 2px 6px;
+  margin-left: -6px;
+  border-radius: 8px;
+}
+.cmp-sources li + li {
+  margin-top: 12px;
+}
+.cmp-sources li::marker {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.cmp-sources li:target {
+  background: var(--accent-soft);
+}
+.cmp-src-name {
+  font-weight: 600;
+}
+.cmp-sources > li > a,
+.cmp-sources > li > code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* ---- responsive ---------------------------------------------------------- */
+
+@media (max-width: 760px) {
+  .cmp-types {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .cmp-layout {
+    padding-left: 16px;
+    padding-right: 16px;
+    row-gap: 16px;
+  }
+  .site-header .tagline {
+    display: none;
+  }
+  .cmp-title {
+    font-size: 25px;
+  }
+  .cmp-section {
+    padding: 20px 16px 16px;
+  }
+  .cmp-h2 {
+    font-size: 19px;
+    gap: 10px;
+  }
+  .cmp-num {
+    min-width: 26px;
+    height: 26px;
+  }
+  .cmp-summary {
+    font-size: 16px;
+  }
+  .cmp-pick,
+  .cmp-duo {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cmp-toc-list {
+    columns: 1;
+  }
+  .cmp-table th,
+  .cmp-table td {
+    padding: 9px 11px;
+  }
+  .cmp-table.is-text tbody th {
+    width: 6.5em;
+    min-width: 6.5em;
+  }
+  .cmp-figure {
+    padding: 14px 14px 16px;
+  }
+  .cmp-bars {
+    --label-room: 80px;
+  }
+  .cmp-tests > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+}
+
+/* Very narrow phones: shorten the back link to "返回" (still read in full by screen readers). */
+@media (max-width: 420px) {
+  .cmp-back-more {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .cmp-brand-name {
+    font-size: 20px;
+  }
+}
+
+/* ---- print --------------------------------------------------------------- */
+
+@media print {
+  /* Always print on white, whatever theme is showing (beats both theme selectors). */
+  html:root[lang] {
+    color-scheme: light;
+    --page: #fff;
+    --surface: #fff;
+    --surface-2: #f5f5f3;
+    --ink-1: #000;
+    --ink-2: #333;
+    --ink-3: #555;
+    --hairline: rgba(0, 0, 0, 0.15);
+    --line: #ccc;
+    --track: #e5e5e5;
+    --accent: #2a78d6;
+    --accent-soft: #eef4fc;
+    --accent-ink: #1c5cab;
+    --chip-stale-bg: #fbf3e0;
+    --chip-stale-ink: #6f4b00;
+    --chip-error-bg: #fdeaea;
+    --chip-error-ink: #a32020;
+    --s1: #2a78d6;
+    --s2: #eb6834;
+    --shadow: none;
+  }
+  body {
+    font-size: 11pt;
+  }
+  .cmp-skip,
+  .cmp-actions,
+  .cmp-toc,
+  .cmp-cta-row,
+  .cmp-table-wrap::before,
+  .cmp-table-wrap::after {
+    display: none !important;
+  }
+  .site-header {
+    padding-top: 0;
+  }
+  .cmp-layout {
+    display: block;
+    max-width: none;
+    padding: 0 24px;
+  }
+  .cmp-body {
+    display: block;
+  }
+  .cmp-section {
+    margin-top: 14pt;
+    box-shadow: none;
+    border-color: #ccc;
+  }
+  .cmp-h2,
+  .cmp-h3 {
+    break-after: avoid;
+  }
+  .cmp-table tr,
+  .cmp-callout,
+  .cmp-figure,
+  .cmp-pick-card,
+  .cmp-tile,
+  .cmp-type,
+  .cmp-tests > div {
+    break-inside: avoid;
+  }
+  .cmp-scroll {
+    overflow: visible;
+  }
+  .cmp-table.is-wide,
+  .cmp-table.is-models {
+    min-width: 0;
+  }
+  .cmp-dot,
+  .cmp-num,
+  .cmp-bar-fill,
+  .cmp-pick-card::before,
+  .cmp-callout,
+  .cmp-badge,
+  .cmp-tag {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

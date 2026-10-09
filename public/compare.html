@@ -1,0 +1,856 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GPT-6 Luna Decisions 与 Jev 1.13 详细对比 · Simple Jev</title>
+  <meta name="description" content="从题型、输入输出、单次上限、价格、速度、回答风格、安全和数据政策等方面，对比 OpenAI 的 GPT-6 Luna Decisions 和 TypeSafe 的 Jev 1.13。数据截至 2026-10-09。">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/compare.css">
+  <script src="/js/theme.js"></script>
+  <script type="module" src="/js/compare.js"></script>
+</head>
+<body>
+  <a class="cmp-skip" href="#cmp-main">跳到正文</a>
+
+  <header class="site-header">
+    <a class="brand cmp-brand" href="/">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="1" y="1" width="30" height="30" rx="8" class="brand-bg"/>
+        <rect x="6" y="13" width="12" height="6" rx="2" class="brand-a"/>
+        <rect x="20" y="13" width="6" height="6" rx="2" class="brand-b"/>
+      </svg>
+      <span class="cmp-brand-text">
+        <span class="cmp-brand-name">Simple Jev</span>
+        <span class="tagline">在浏览器里调用 Jev、GPT-6 Luna 等决策模型，不用命令行</span>
+      </span>
+    </a>
+    <div class="header-actions cmp-actions">
+      <a href="/" class="icon-btn cmp-back">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="cmp-icon"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>
+        <span>返回<span class="cmp-back-more">调用工具</span></span>
+      </a>
+      <button type="button" id="theme-toggle" class="icon-btn" aria-label="切换主题：跟随系统">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="icon icon-auto"><path d="M12 3a9 9 0 1 0 0 18V3Z"/><circle cx="12" cy="12" r="9" fill="none"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="icon icon-light"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" fill="none"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="icon icon-dark"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z"/></svg>
+        <span id="theme-label" class="icon-btn-label">跟随系统</span>
+      </button>
+    </div>
+  </header>
+
+  <main id="cmp-main" class="cmp-layout">
+    <header class="cmp-hero">
+      <p class="cmp-eyebrow">模型对比</p>
+      <h1 class="cmp-title">GPT-6 Luna Decisions 与 Jev 1.13 详细对比</h1>
+      <p class="cmp-dateline">数据截至 <time datetime="2026-10-09">2026-10-09</time></p>
+      <p class="cmp-lede">依据 OpenRouter 模型目录、OpenRouter 与 OpenAI 的官方文档，以及我们当天通过 OpenRouter 做的真实调用（文中标“实测”）。</p>
+      <ul class="cmp-key" aria-label="图例">
+        <li><span class="cmp-dot is-luna" aria-hidden="true"></span><strong>Luna</strong><span class="cmp-key-full">GPT-6 Luna Decisions · OpenAI</span></li>
+        <li><span class="cmp-dot is-jev" aria-hidden="true"></span><strong>Jev</strong><span class="cmp-key-full">Jev 1.13 · TypeSafe</span></li>
+        <li class="cmp-key-note">所有对比表都是 Luna 在前、Jev 在后</li>
+      </ul>
+    </header>
+
+    <nav class="cmp-toc" aria-labelledby="cmp-toc-title">
+      <h2 id="cmp-toc-title" class="cmp-toc-title">目录</h2>
+      <ol class="cmp-toc-list">
+        <li><a href="#verdict">一句话结论与怎么选</a></li>
+        <li><a href="#basics">基本信息</a></li>
+        <li><a href="#modes">决策方式</a></li>
+        <li><a href="#io">输入和输出</a></li>
+        <li><a href="#limits">单次调用的上限</a></li>
+        <li><a href="#pricing">价格</a></li>
+        <li><a href="#speed">速度和稳定性</a></li>
+        <li><a href="#style">回答风格</a></li>
+        <li><a href="#safety">安全、拒答和数据</a></li>
+        <li><a href="#first-image">“首次支持图像输入”的核实</a></li>
+        <li><a href="#in-app">在 Simple Jev 里使用 Luna</a></li>
+        <li><a href="#method">测试方法</a></li>
+        <li><a href="#sources">来源</a></li>
+      </ol>
+    </nav>
+
+    <div class="cmp-body">
+
+      <!-- 1 ------------------------------------------------------------------ -->
+      <section id="verdict" class="card cmp-section" aria-labelledby="verdict-h">
+        <h2 id="verdict-h" class="cmp-h2"><span class="cmp-num" aria-hidden="true">1</span>一句话结论与怎么选</h2>
+        <p class="cmp-summary">只处理文字、一次问很多题、在意成本，选 <strong>Jev</strong>；要看图片、输入很长，或需要 OpenAI 的合规选项，选 <strong>Luna</strong>。</p>
+
+        <div class="cmp-pick">
+          <article class="cmp-pick-card is-luna" aria-labelledby="pick-luna-h">
+            <h3 id="pick-luna-h" class="cmp-pick-title"><span class="cmp-dot is-luna" aria-hidden="true"></span>这些情况选 Luna</h3>
+            <ul class="cmp-list">
+              <li><strong>需要看图片。</strong>Luna 能读图，每次最多 128 张；Jev 不支持图片。</li>
+              <li><strong>输入很长。</strong>超过 Jev 32,000 token 的单次输入上限时，可以用上下文 1,050,000 token 的 Luna。</li>
+              <li><strong>需要 OpenAI 的合规选项。</strong>零数据保留（ZDR）、HIPAA、欧盟数据驻留，限直连 OpenAI 的合格客户。</li>
+            </ul>
+          </article>
+          <article class="cmp-pick-card is-jev" aria-labelledby="pick-jev-h">
+            <h3 id="pick-jev-h" class="cmp-pick-title"><span class="cmp-dot is-jev" aria-hidden="true"></span>这些情况选 Jev</h3>
+            <ul class="cmp-list">
+              <li><strong>只处理文字。</strong>Jev 只接受文字和 JSON。</li>
+              <li><strong>一次要问很多题。</strong>Luna 单次最多 200 道；Jev 实测 2,048 道也能一次跑完，不过题越多错得越多。</li>
+              <li><strong>在意成本，尤其是批量。</strong>128 道是/否题时，Jev 便宜约 20 倍。</li>
+              <li><strong>希望延迟尾部更稳。</strong>p99 延迟 Jev 399 ms，Luna 980 ms。</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="cmp-callout is-warn" role="note">
+          <svg class="cmp-callout-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 2.8 19.5h18.4L12 3.5Z"/><path d="M12 10v4.5M12 17.2v.1"/></svg>
+          <div class="cmp-callout-body">
+            <p class="cmp-callout-title">注意两个容易踩的坑</p>
+            <ul class="cmp-list">
+              <li>Luna 有内容审核。通过 OpenRouter 调用时，只要一道题被拒答，整个请求都会失败（<a href="#safety">详见第 9 节</a>）。</li>
+              <li>Jev 收到图片不会报错，但给出的答案只是乱猜（<a href="#jev-image-warning">详见第 4 节</a>）。</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3 class="cmp-h3" id="glance-h">关键数字速览</h3>
+        <div class="cmp-table-wrap">
+          <div class="cmp-scroll" data-label="关键数字速览表">
+            <table class="cmp-table" aria-labelledby="glance-h">
+              <thead>
+                <tr>
+                  <th scope="col">项目</th>
+                  <th scope="col" class="num"><span class="cmp-dot is-luna" aria-hidden="true"></span>Luna</th>
+                  <th scope="col" class="num"><span class="cmp-dot is-jev" aria-hidden="true"></span>Jev</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><th scope="row">输入价格（每百万 token）</th><td class="num">$0.10</td><td class="num">$0.042</td></tr>
+                <tr><th scope="row">上下文长度</th><td class="num">1,050,000 token</td><td class="num">64,000 token</td></tr>
+                <tr><th scope="row">单次输入上限</th><td class="num">目录未写</td><td class="num">32,000 token</td></tr>
+                <tr><th scope="row">单次最多题数</th><td class="num">200 道</td><td class="num">未写上限<span class="cmp-sub">实测 2,048 道成功</span></td></tr>
+                <tr><th scope="row">图片输入</th><td class="num">支持<span class="cmp-sub">每次最多 128 张</span></td><td class="num">不支持</td></tr>
+                <tr><th scope="row">延迟 p50 / p99</th><td class="num">213 / 980 ms</td><td class="num">194 / 399 ms</td></tr>
+                <tr><th scope="row">近 1 天可用率</th><td class="num">98.68%</td><td class="num">99.86%</td></tr>
+                <tr><th scope="row">内容审核</th><td class="num">有</td><td class="num">没有</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p class="cmp-cite">各项数字的出处见后面对应的章节。</p>
+      </section>
+
+      <!-- 2 ------------------------------------------------------------------ -->
+      <section id="basics" class="card cmp-section" aria-labelledby="basics-h">
+        <h2 id="basics-h" class="cmp-h2"><span class="cmp-num" aria-hidden="true">2</span>基本信息</h2>
+        <div class="cmp-table-wrap">
+          <div class="cmp-scroll" data-label="基本信息表">
+            <table class="cmp-table is-text is-wide" aria-labelledby="basics-h">
+              <thead>
+                <tr>
+                  <th scope="col">项目</th>
+                  <th scope="col"><span class="cmp-dot is-luna" aria-hidden="true"></span>GPT-6 Luna Decisions</th>
+                  <th scope="col"><span class="cmp-dot is-jev" aria-hidden="true"></span>Jev 1.13</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">OpenRouter 模型 ID</th>
+                  <td><code>openai/gpt-6-luna-decisions</code><span class="cmp-sub">版本 <code>openai/gpt-6-luna-decisions-20261006</code></span></td>
+                  <td><code>typesafe/jev-1.13</code><span class="cmp-sub">版本 <code>typesafe/jev-1.13-20260917</code>；别名 <code>~typesafe/jev-latest</code> 当前指向 1.13</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">开发方 / 服务商</th>
+                  <td>OpenAI<span class="cmp-sub">OpenRouter 上只有 OpenAI 一家服务商</span></td>
+                  <td>TypeSafe（“System One”系列第一款）<span class="cmp-sub">只有 TypeSafe 一家服务商</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">OpenRouter 上架日期</th>
+                  <td class="cmp-nowrap">2026-10-06</td>
+                  <td class="cmp-nowrap">2026-09-18</td>
+                </tr>
+                <tr>
+                  <th scope="row">底层</th>
+                  <td>GPT-6 Luna，通过 OpenAI 的 Decisions API（<code>POST /v1/decisions</code>）提供</td>
+                  <td>TypeSafe 自研决策模型</td>
+                </tr>
+                <tr>
+                  <th scope="row">状态</th>
+                  <td>公测（public beta）<span class="cmp-sub">OpenAI 称 Decisions API “预计未来几周正式发布（GA）”；目前只有 <code>gpt-6-luna</code> 一个模型</span></td>
+                  <td>已上线</td>
+                </tr>
+                <tr>
+                  <th scope="row">官方速度说法</th>
+                  <td>OpenAI 称“比 Responses API 快约 10 倍”<span class="cmp-sub">未公布测试方法</span></td>
+                  <td><span aria-label="无">—</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p class="cmp-cite">来源：<a href="#src-catalog">OpenRouter 模型目录</a>、<a href="#src-openai-guide">OpenAI Decisions 指南</a></p>
+      </section>
+
+      <!-- 3 ------------------------------------------------------------------ -->
+      <section id="modes" class="card cmp-section" aria-labelledby="modes-h">
+        <h2 id="modes-h" class="cmp-h2"><span class="cmp-num" aria-hidden="true">3</span>决策方式</h2>
+        <p>通过 OpenRouter 的统一接口 <code>/api/alpha/decisions</code> 调用时，两个模型的<strong>题型、请求格式、返回格式完全一样</strong>。同一个文字请求，换模型只要改 <code>model</code> 字段。</p>
+
+        <h3 class="cmp-h3">三种题型（没有其他题型）</h3>
+        <div class="cmp-types">
+          <div class="cmp-type">
+            <p class="cmp-type-name"><code>noul</code> 是 / 否</p>
+            <p class="cmp-type-desc">判断一件事成不成立，返回“是”的概率。</p>
+            <p class="cmp-type-ret">返回 <code>{ type, noul }</code></p>
+          </div>
+          <div class="cmp-type">
+            <p class="cmp-type-name"><code>choice</code> 单选</p>
+            <p class="cmp-type-desc">从几个选项里挑一个，返回选中项、每个选项的概率和置信度。</p>
+            <p class="cmp-type-ret">返回 <code>{ type, choice, probabilities: {选项: 概率}, confidence }</code></p>
+          </div>
+          <div class="cmp-type">
+            <p class="cmp-type-name"><code>score</code> 打分</p>
+            <p class="cmp-type-desc">放到一组从低到高的档位上打分。</p>
+            <p class="cmp-type-ret">返回 <code>{ type, score, legend, probabilities: {"0": …}, confidence }</code></p>
+          </div>
+        </div>
+        <p class="cmp-note"><code>score</code> 是各档位编号（从 0 开始）按概率加权的平均值，所以可能落在两档之间，比如<a href="#style">第 8 节</a>里 Luna 打出的 1.69。</p>
+
+        <h3 class="cmp-h3">请求和返回的格式</h3>
+        <p>请求（两个模型相同）：</p>
+        <pre class="cmp-code"><code>{
+  model,
+  state,
+  questions: {
+    题名: { type, instructions, criteria }
+  }
+}</code></pre>
+        <p>返回的顶层字段（两个模型相同）：<code>answers</code>、<code>id</code>、<code>model</code>、<code>provider</code>、<code>usage</code>。</p>
+
+        <div class="cmp-aside">
+          <p class="cmp-aside-title">直连 OpenAI 时的叫法（仅供了解）</p>
+          <p>OpenAI 原生接口的字段名不一样，OpenRouter 已经做了转换，通过 OpenRouter 调用时不用关心：</p>
+          <ul class="cmp-list">
+            <li>题型叫 <code>predicate</code>（概率）/ <code>choice</code> / <code>score</code>；</li>
+            <li>请求字段是 <code>model</code>、<code>input</code>（字符串，或含 <code>input_text</code> / <code>input_image</code> 的 user 消息）、<code>questions</code> 数组（每题有 <code>name</code>）；</li>
+            <li>单选写成 <code>choices: [{value, description}]</code>，打分写成 <code>levels: [{label, description}]</code>；</li>
+            <li>返回 <code>answers</code> 数组；单选和打分的 <code>probabilities</code> 是数组；</li>
+            <li>某道题被拒答时，返回 <code>type: "refusal"</code> 的答案。</li>
+          </ul>
+        </div>
+        <p class="cmp-cite">来源：<a href="#src-reference">OpenRouter API 参考</a>、<a href="#src-openai-guide">OpenAI Decisions 指南</a>、<a href="#test-a">实测 A</a></p>
+      </section>
+
+      <!-- 4 ------------------------------------------------------------------ -->
+      <section id="io" class="card cmp-section" aria-labelledby="io-h">
+        <h2 id="io-h" class="cmp-h2"><span class="cmp-num" aria-hidden="true">4</span>输入和输出</h2>
+
+        <h3 class="cmp-h3" id="io-in-h">能输入什么</h3>
+        <div class="cmp-table-wrap">
+          <div class="cmp-scroll" data-label="输入对比表">
+            <table class="cmp-table is-text" aria-labelledby="io-in-h">
+              <thead>
+                <tr>
+                  <th scope="col">项目</th>
+                  <th scope="col"><span class="cmp-dot is-luna" aria-hidden="true"></span>Luna</th>
+                  <th scope="col"><span class="cmp-dot is-jev" aria-hidden="true"></span>Jev</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">输入类型</th>
+                  <td>文字、JSON（对象 / 数组）、图片</td>
+                  <td>只有文字和 JSON</td>
+                </tr>
+                <tr>
+                  <th scope="row">上下文长度</th>
+                  <td>1,050,000 token</td>
+                  <td>64,000 token<span class="cmp-sub">10 月 4 日查询时目录写的还是 32,000</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">单次输入上限</th>
+                  <td>目录没有写<span class="cmp-sub"><code>max_prompt_tokens</code> 为空</span></td>
+                  <td>32,000 token<span class="cmp-sub">服务商端点写的 <code>max_prompt_tokens</code>；实测 33,992 个输入 token 的请求也成功了</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <figure class="cmp-figure" aria-labelledby="ctx-cap">
+          <figcaption id="ctx-cap" class="cmp-fig-cap">上下文长度<span class="cmp-fig-sub">单位：token</span></figcaption>
+          <div class="cmp-bars" data-bars>
+            <div class="cmp-bar" data-value="1050000">
+              <span class="cmp-bar-name">Luna</span>
+              <span class="cmp-bar-area"><span class="cmp-bar-fill is-luna"></span><span class="cmp-bar-value">1,050,000</span></span>
+            </div>
+            <div class="cmp-bar" data-value="64000">
+              <span class="cmp-bar-name">Jev</span>
+              <span class="cmp-bar-area"><span class="cmp-bar-fill is-jev"></span><span class="cmp-bar-value">64,000</span></span>
+            </div>
+          </div>
+        </figure>
+
+        <h3 class="cmp-h3">Luna 的图片怎么传</h3>
+        <ul class="cmp-list">
+          <li>放在 <code>state</code> <strong>数组的最外层</strong>，写成 <code>{ "type": "image_url", "image_url": { "url": "data:image/png;base64,..." } }</code>；数组里的文字直接写字符串。</li>
+          <li>只接受 base64 data URL，类型为 <code>image/png</code>、<code>image/jpeg</code>、<code>image/webp</code>；<strong>不会下载远程网址</strong>。</li>
+          <li>可以设置 <code>detail</code>（<code>auto</code> / <code>low</code> / <code>high</code>）。</li>
+          <li>每次最多 128 张图。</li>
+          <li>嵌在对象里的图片不会被当成图片读取。</li>
+        </ul>
+        <pre class="cmp-code"><code>"state": [
+  "这里直接写文字",
+  { "type": "image_url", "image_url": { "url": "data:image/png;base64,..." } }
+]</code></pre>
+
+        <h3 class="cmp-h3">实测：Luna 看图</h3>
+        <ul class="cmp-list">
+          <li>测试图：左半红、右半蓝、蓝色区域里有个白色方块。Luna 答对左半是红（95%）、有白色方块（概率 1）、方块在右半（69%）。<code>detail=low</code> 结果相同。</li>
+          <li>JSON 对象和图片可以一起放在 <code>state</code> 数组里，正常回答（<code>noul</code> 0.93）。</li>
+          <li>嵌在对象里的图片确实读不到：答案变成乱猜（左半颜色答“蓝”60%，实际是红）。</li>
+          <li>传远程网址：HTTP 400，<code>OpenAI Decisions accepts only embedded base64 data URL images</code>。</li>
+          <li>传 129 张图：HTTP 400，<code>OpenAI Decisions accepts at most 128 images, got 129</code>。</li>
+        </ul>
+
+        <div class="cmp-callout is-warn" role="note" id="jev-image-warning">
+          <svg class="cmp-callout-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 2.8 19.5h18.4L12 3.5Z"/><path d="M12 10v4.5M12 17.2v.1"/></svg>
+          <div class="cmp-callout-body">
+            <p class="cmp-callout-title">Jev 收到图片不报错，会悄悄乱猜</p>
+            <p>把图片发给 Jev，照样返回 HTTP 200 和一组概率，但答案只是乱猜。同一张测试图（左半红、右半蓝）：</p>
+            <ul class="cmp-list">
+              <li>问左半是什么颜色：红 33% / 绿 30% / 蓝 24% / 黄 13%；</li>
+              <li>问白色方块在哪：58% 答“没有白色方块”。</li>
+            </ul>
+            <p>要看图请用 Luna。Simple Jev 里选 Jev 这类纯文字模型时，图片上传会被禁用。</p>
+          </div>
+        </div>
+
+        <h3 class="cmp-h3">输出</h3>
+        <p>两者都只输出“决策”（概率、选项或分数），不生成文字。输出 token 都免费：Luna 的 <code>usage.output_tokens</code> 一直是 0；Jev 会报告输出 token 数，但不收费。</p>
+        <p class="cmp-cite">来源：<a href="#src-catalog">OpenRouter 模型目录</a>、<a href="#src-multimodal">OpenRouter 多模态决策指南</a>、<a href="#test-a">实测 A</a>、<a href="#test-b">B</a>、<a href="#test-c">C</a>、<a href="#test-e">E</a></p>
+      </section>
+
+      <!-- 5 ------------------------------------------------------------------ -->
+      <section id="limits" class="card cmp-section" aria-labelledby="limits-h">
+        <h2 id="limits-h" class="cmp-h2"><span class="cmp-num" aria-hidden="true">5</span>单次调用的上限</h2>
+        <p>以下是我们通过 OpenRouter 实测的结果。“未测到”表示我们没有试更大的数，不代表没有上限。</p>
+        <div class="cmp-table-wrap">
+          <div class="cmp-scroll" data-label="单次调用上限表">
+            <table class="cmp-table is-text is-wide" aria-labelledby="limits-h">
+              <thead>
+                <tr>
+                  <th scope="col">项目</th>
+                  <th scope="col"><span class="cmp-dot is-luna" aria-hidden="true"></span>Luna</th>
+                  <th scope="col"><span class="cmp-dot is-jev" aria-hidden="true"></span>Jev</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">单次最多题数</th>
+                  <td><strong>200 道</strong><span class="cmp-sub">200 道成功（30,206 输入 token，$0.0030206）；201 道 → HTTP 400 <code>OpenAI Decisions accepts at most 200 questions, got 201</code></span></td>
+                  <td>文档没写上限<span class="cmp-sub">128、1,024、2,048 道都成功</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">题多时的准确率<span class="cmp-sub">判断数字奇偶的是/否题</span></th>
+                  <td>128 道错 2 道</td>
+                  <td>128 道错 1 道<span class="cmp-sub">1,024 道错 108 道（10.5%）；2,048 道错 287 道（14%）</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">打分档位</th>
+                  <td>2–10 档<span class="cmp-sub">32 档 → HTTP 400 <code>OpenAI Decisions needs between 2 and 10 score levels</code></span></td>
+                  <td>最多 10 档<span class="cmp-sub">32 档 → HTTP 400 <code>Too many score levels. Must have at most 10 levels.</code></span></td>
+                </tr>
+                <tr>
+                  <th scope="row">单选选项</th>
+                  <td>64 个选项正常并答对<span class="cmp-sub">更高上限未测到</span></td>
+                  <td>64 个选项正常并答对<span class="cmp-sub">更高上限未测到</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">每次图片数</th>
+                  <td>最多 128 张</td>
+                  <td>不支持图片</td>
+                </tr>
+                <tr>
+                  <th scope="row">单次最大输入</th>
+                  <td>上下文 1,050,000 token</td>
+                  <td>上下文 64,000 token，单次输入上限 32,000 token</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p class="cmp-cite">来源：<a href="#test-c">实测 C</a>、<a href="#test-d">D</a>、<a href="#test-e">E</a>、<a href="#src-multimodal">OpenRouter 多模态决策指南</a>、<a href="#src-catalog">OpenRouter 模型目录</a></p>
+      </section>
+
+      <!-- 6 ------------------------------------------------------------------ -->
+      <section id="pricing" class="card cmp-section" aria-labelledby="pricing-h">
+        <h2 id="pricing-h" class="cmp-h2"><span class="cmp-num" aria-hidden="true">6</span>价格</h2>
+        <div class="cmp-duo">
+          <div class="cmp-tile is-luna">
+            <p class="cmp-tile-name"><span class="cmp-dot is-luna" aria-hidden="true"></span>Luna 输入价格</p>
+            <p class="cmp-tile-value">$0.10<span class="cmp-tile-unit"> / 百万 token</span></p>
+            <p class="cmp-tile-sub">输出、缓存读取、缓存写入都是 $0</p>
+          </div>
+          <div class="cmp-tile is-jev">
+            <p class="cmp-tile-name"><span class="cmp-dot is-jev" aria-hidden="true"></span>Jev 输入价格</p>
+            <p class="cmp-tile-value">$0.042<span class="cmp-tile-unit"> / 百万 token</span></p>
+            <p class="cmp-tile-sub">输出免费</p>
+          </div>
+        </div>
+        <p>按单价算，Luna 是 Jev 的约 2.4 倍。但 Luna 每道题计的 token 更多，实际差多少要看场景：</p>
+
+        <h3 class="cmp-h3" id="price-scn-h">同样的请求，实际花多少（实测）</h3>
+        <div class="cmp-table-wrap">
+          <div class="cmp-scroll" data-label="实测花费表">
+            <table class="cmp-table is-wide" aria-labelledby="price-scn-h">
+              <thead>
+                <tr>
+                  <th scope="col">场景</th>
+                  <th scope="col" class="num"><span class="cmp-dot is-luna" aria-hidden="true"></span>Luna</th>
+                  <th scope="col" class="num"><span class="cmp-dot is-jev" aria-hidden="true"></span>Jev</th>
+                  <th scope="col" class="num">Luna / Jev</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">同一个 4 道题的文字请求</th>
+                  <td class="num">$0.0000568<span class="cmp-sub">568 token</span></td>
+                  <td class="num">$0.0000218<span class="cmp-sub">519 token</span></td>
+                  <td class="num">约 2.6 倍</td>
+                </tr>
+                <tr>
+                  <th scope="row">128 道是/否题</th>
+                  <td class="num">$0.0019356<span class="cmp-sub">19,356 token</span></td>
+                  <td class="num">$0.0000934<span class="cmp-sub">2,224 token</span></td>
+                  <td class="num"><strong>约 20.7 倍</strong></td>
+                </tr>
+                <tr>
+                  <th scope="row">1 道 16 选项单选</th>
+                  <td class="num">$0.0000282<span class="cmp-sub">282 token</span></td>
+                  <td class="num">$0.0000248<span class="cmp-sub">590 token</span></td>
+                  <td class="num">约 1.1 倍</td>
+                </tr>
+                <tr>
+                  <th scope="row">1 道 64 选项单选</th>
+                  <td class="num">$0.000081<span class="cmp-sub">810 token</span></td>
+                  <td class="num">$0.0000651<span class="cmp-sub">1,550 token</span></td>
+                  <td class="num">约 1.2 倍</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <ul class="cmp-list">
+          <li>按题算：Luna 每道是/否题大约计 150 token（200 道共 30,206 token，约 151 token/道）；Jev 约 17 token/道。所以是/否题越多，Luna 贵得越多。</li>
+          <li>选项多的单选题正好相反：Jev 计的 token 比 Luna 多，两者花费接近。</li>
+          <li>OpenAI 官方另注：直连 OpenAI 时有区域处理加价和长上下文倍率。</li>
+          <li>目录里还给 Luna 列了“web_search $0.01/次”，但 Decisions 接口没有任何网络搜索参数。我们所有实测费用都正好等于“输入 token × $0.10/百万”（例如 568 token → $0.0000568），没有出现搜索费。</li>
+        </ul>
+
+        <h3 class="cmp-h3" id="img-tok-h">Luna 每张图片多算多少 token（实测）</h3>
+        <p>同一道单选题，不带图时 114 token。下表是加一张 JPEG 图后多出来的 token（Jev 不支持图片，所以只有 Luna）：</p>
+        <div class="cmp-table-wrap">
+          <div class="cmp-scroll" data-label="图片 token 表">
+            <table class="cmp-table" aria-labelledby="img-tok-h">
+              <thead>
+                <tr>
+                  <th scope="col">图片尺寸</th>
+                  <th scope="col" class="num"><code>detail=auto</code><span class="cmp-sub">默认</span></th>
+                  <th scope="col" class="num"><code>detail=high</code></th>
+                  <th scope="col" class="num"><code>detail=low</code></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row" class="cmp-nowrap">512×384</th>
+                  <td class="num">+193</td>
+                  <td class="num">+193</td>
+                  <td class="num">+193</td>
+                </tr>
+                <tr>
+                  <th scope="row" class="cmp-nowrap">1024×768</th>
+                  <td class="num">+769<span class="cmp-sub">约 $0.000077</span></td>
+                  <td class="num">+769</td>
+                  <td class="num">+193</td>
+                </tr>
+                <tr>
+                  <th scope="row" class="cmp-nowrap">2048×1536</th>
+                  <td class="num">+3,073<span class="cmp-sub">约 $0.00031</span></td>
+                  <td class="num">+2,452</td>
+                  <td class="num">+193</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p>所有组合都答对了（房子是红色）。<code>detail=low</code> 时每张图固定约 193 token（约 $0.000019）。</p>
+        <p class="cmp-cite">来源：<a href="#src-catalog">OpenRouter 模型目录</a>、<a href="#src-openai-guide">OpenAI Decisions 指南</a>、<a href="#src-reference">OpenRouter API 参考</a>、<a href="#test-a">实测 A</a>、<a href="#test-c">C</a>、<a href="#test-d">D</a>、<a href="#test-e">E</a></p>
+      </section>
+
+      <!-- 7 ------------------------------------------------------------------ -->
+      <section id="speed" class="card cmp-section" aria-labelledby="speed-h">
+        <h2 id="speed-h" class="cmp-h2"><span class="cmp-num" aria-hidden="true">7</span>速度和稳定性</h2>
+        <p>两者的中位延迟差不多，差别主要在尾部：最慢的 1% 请求，Luna 要 980 ms，Jev 是 399 ms。</p>
+
+        <figure class="cmp-figure" aria-labelledby="lat-cap">
+          <figcaption id="lat-cap" class="cmp-fig-cap">OpenRouter 端点延迟<span class="cmp-fig-sub">单位：毫秒，越短越好；2026-10-09 查询时最近 30 分钟的统计。p50 表示一半请求比这快，p99 表示 99% 的请求比这快。</span></figcaption>
+          <div class="cmp-bars is-grouped" data-bars>
+            <div class="cmp-bar-group" role="group" aria-label="p50">
+              <span class="cmp-bar-group-label" aria-hidden="true">p50</span>
+              <div class="cmp-bar" data-value="213"><span class="cmp-bar-name">Luna</span><span class="cmp-bar-area"><span class="cmp-bar-fill is-luna"></span><span class="cmp-bar-value">213 ms</span></span></div>
+              <div class="cmp-bar" data-value="194"><span class="cmp-bar-name">Jev</span><span class="cmp-bar-area"><span class="cmp-bar-fill is-jev"></span><span class="cmp-bar-value">194 ms</span></span></div>
+            </div>
+            <div class="cmp-bar-group" role="group" aria-label="p75">
+              <span class="cmp-bar-group-label" aria-hidden="true">p75</span>
+              <div class="cmp-bar" data-value="282"><span class="cmp-bar-name">Luna</span><span class="cmp-bar-area"><span class="cmp-bar-fill is-luna"></span><span class="cmp-bar-value">282 ms</span></span></div>
+              <div class="cmp-bar" data-value="243"><span class="cmp-bar-name">Jev</span><span class="cmp-bar-area"><span class="cmp-bar-fill is-jev"></span><span class="cmp-bar-value">243 ms</span></span></div>
+            </div>
+            <div class="cmp-bar-group" role="group" aria-label="p90">
+              <span class="cmp-bar-group-label" aria-hidden="true">p90</span>
+              <div class="cmp-bar" data-value="402"><span class="cmp-bar-name">Luna</span><span class="cmp-bar-area"><span class="cmp-bar-fill is-luna"></span><span class="cmp-bar-value">402 ms</span></span></div>
+              <div class="cmp-bar" data-value="282"><span class="cmp-bar-name">Jev</span><span class="cmp-bar-area"><span class="cmp-bar-fill is-jev"></span><span class="cmp-bar-value">282 ms</span></span></div>
+            </div>
+            <div class="cmp-bar-group" role="group" aria-label="p99">
+              <span class="cmp-bar-group-label" aria-hidden="true">p99</span>
+              <div class="cmp-bar" data-value="980"><span class="cmp-bar-name">Luna</span><span class="cmp-bar-area"><span class="cmp-bar-fill is-luna"></span><span class="cmp-bar-value">980 ms</span></span></div>
+              <div class="cmp-bar" data-value="399"><span class="cmp-bar-name">Jev</span><span class="cmp-bar-area"><span class="cmp-bar-fill is-jev"></span><span class="cmp-bar-value">399 ms</span></span></div>
+            </div>
+          </div>
+        </figure>
+
+        <div class="cmp-table-wrap">
+          <div class="cmp-scroll" data-label="稳定性表">
+            <table class="cmp-table" aria-labelledby="speed-h">
+              <thead>
+                <tr>
+                  <th scope="col">项目</th>
+                  <th scope="col" class="num"><span class="cmp-dot is-luna" aria-hidden="true"></span>Luna</th>
+                  <th scope="col" class="num"><span class="cmp-dot is-jev" aria-hidden="true"></span>Jev</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">近 1 天可用率<span class="cmp-sub">OpenRouter 端点统计</span></th>
+                  <td class="num">98.68%</td>
+                  <td class="num">99.86%</td>
+                </tr>
+                <tr>
+                  <th scope="row">30 分钟请求量<span class="cmp-sub">OpenRouter 端点统计</span></th>
+                  <td class="num">307,330</td>
+                  <td class="num">3,149,699</td>
+                </tr>
+                <tr>
+                  <th scope="row">我们实测的往返时间<span class="cmp-sub">同一个小请求各 5 次的中位数，含代理</span></th>
+                  <td class="num">0.35 秒<span class="cmp-sub">0.31–0.36</span></td>
+                  <td class="num">0.41 秒<span class="cmp-sub">0.33–0.48</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <ul class="cmp-list">
+          <li>我们自己测的小请求里，Luna 的中位数反而略快；不过 Luna 第一次调用用了 1.48 秒。</li>
+          <li>OpenAI 称 Decisions API “比 Responses API 快约 10 倍”。这是和 OpenAI 自家接口比，不是和 Jev 比，而且没有公布测试方法。</li>
+        </ul>
+        <p class="cmp-cite">来源：<a href="#src-catalog">OpenRouter 模型目录（端点统计）</a>、<a href="#src-openai-guide">OpenAI Decisions 指南</a>、<a href="#test-a">实测 A</a>、<a href="#test-d">D</a></p>
+      </section>
+
+      <!-- 8 ------------------------------------------------------------------ -->
+      <section id="style" class="card cmp-section" aria-labelledby="style-h">
+        <h2 id="style-h" class="cmp-h2"><span class="cmp-num" aria-hidden="true">8</span>回答风格</h2>
+        <p>同一组 4 道文字题，分别发给两个模型（实测 A）：</p>
+        <div class="cmp-table-wrap">
+          <div class="cmp-scroll" data-label="回答风格对比表">
+            <table class="cmp-table is-wide" aria-labelledby="style-h">
+              <thead>
+                <tr>
+                  <th scope="col">题目</th>
+                  <th scope="col" class="num"><span class="cmp-dot is-luna" aria-hidden="true"></span>Luna</th>
+                  <th scope="col" class="num"><span class="cmp-dot is-jev" aria-hidden="true"></span>Jev</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">猫是活的还是死的<span class="cmp-sub">只有“活 / 死”两个选项</span></th>
+                  <td class="num">活 89% / 死 11%<span class="cmp-sub">置信度 0.78</span></td>
+                  <td class="num">活 64% / 死 36%<span class="cmp-sub">置信度 0.28</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">同上，加“叠加态”选项</th>
+                  <td class="num">叠加态 98%<span class="cmp-sub">置信度 0.97</span></td>
+                  <td class="num">叠加态 100%<span class="cmp-sub">置信度 1</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">工单是不是 bug<span class="cmp-sub">是/否，数值为“是”的概率</span></th>
+                  <td class="num">0.88</td>
+                  <td class="num">0.94</td>
+                </tr>
+                <tr>
+                  <th scope="row">工单紧急程度<span class="cmp-sub">3 档打分，0 最低、2 最高</span></th>
+                  <td class="num">1.69<span class="cmp-sub">各档 1% / 29% / 70%，置信度 0.53</span></td>
+                  <td class="num">1.99<span class="cmp-sub">各档 0% / 1% / 99%，置信度 0.98</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="cmp-callout is-info" role="note">
+          <svg class="cmp-callout-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8v.1"/></svg>
+          <div class="cmp-callout-body">
+            <p class="cmp-callout-title">观察，不是结论</p>
+            <p>这组题里，除了第一道，Jev 的概率都更极端（更接近 0 或 1），Luna 更“留余地”。这只是一组题的结果，不能说明谁更准。</p>
+          </div>
+        </div>
+        <p class="cmp-cite">来源：<a href="#test-a">实测 A</a></p>
+      </section>
+
+      <!-- 9 ------------------------------------------------------------------ -->
+      <section id="safety" class="card cmp-section" aria-labelledby="safety-h">
+        <h2 id="safety-h" class="cmp-h2"><span class="cmp-num" aria-hidden="true">9</span>安全、拒答和数据</h2>
+
+        <h3 class="cmp-h3">内容审核</h3>
+        <div class="cmp-duo">
+          <div class="cmp-tile is-luna">
+            <p class="cmp-tile-name"><span class="cmp-dot is-luna" aria-hidden="true"></span>Luna</p>
+            <p class="cmp-tile-value">有审核</p>
+            <p class="cmp-tile-sub">目录标为 <code>is_moderated: true</code></p>
+          </div>
+          <div class="cmp-tile is-jev">
+            <p class="cmp-tile-name"><span class="cmp-dot is-jev" aria-hidden="true"></span>Jev</p>
+            <p class="cmp-tile-value">没有审核</p>
+            <p class="cmp-tile-sub">目录未标为有审核</p>
+          </div>
+        </div>
+
+        <h3 class="cmp-h3">拒答</h3>
+        <p>直连 OpenAI 的原生接口时，被拒答的题会返回 <code>type: "refusal"</code> 的答案，其他题照常返回。但通过 OpenRouter 调用时不一样：</p>
+        <div class="cmp-callout is-warn" role="note">
+          <svg class="cmp-callout-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 2.8 19.5h18.4L12 3.5Z"/><path d="M12 10v4.5M12 17.2v.1"/></svg>
+          <div class="cmp-callout-body">
+            <p class="cmp-callout-title">通过 OpenRouter：一道题被拒答，整个请求失败</p>
+            <p>只要有一道题被拒答，整个请求就返回 <strong>HTTP 502</strong>，错误信息是 <code>OpenAI refused to answer question "orientation"</code>，同一请求里的其他题也拿不到答案。</p>
+            <p>我们的测试题是推断一个人的性取向，属于敏感个人信息推断。遇到这种情况，重试没用，需要换个问法。</p>
+          </div>
+        </div>
+
+        <h3 class="cmp-h3">OpenAI 对 <code>/v1/decisions</code> 的数据政策</h3>
+        <p>以下适用于直连 OpenAI：</p>
+        <ul class="cmp-list">
+          <li>不用于训练；滥用监控日志最多保留 30 天。</li>
+          <li>符合条件的客户可以用零数据保留（ZDR）；签署 BAA 后可用于 HIPAA 场景。</li>
+          <li>上传的图片会做 CSAM（儿童性虐待内容）扫描。</li>
+          <li>数据驻留和区域处理支持美国、欧洲（EEA + 瑞士）。</li>
+        </ul>
+        <p>通过 OpenRouter 调用时，还要同时适用 OpenRouter 自己的数据政策。</p>
+        <p class="cmp-cite">来源：<a href="#src-catalog">OpenRouter 模型目录</a>、<a href="#src-openai-guide">OpenAI Decisions 指南</a>、<a href="#src-openai-data">OpenAI 数据控制文档</a>、<a href="#test-e">实测 E</a></p>
+      </section>
+
+      <!-- 10 ----------------------------------------------------------------- -->
+      <section id="first-image" class="card cmp-section" aria-labelledby="first-image-h">
+        <h2 id="first-image-h" class="cmp-h2"><span class="cmp-num" aria-hidden="true">10</span>“首次支持图像输入”的核实</h2>
+        <p class="cmp-verdict"><span class="cmp-badge is-false"><svg viewBox="0 0 24 24" aria-hidden="true" class="cmp-icon"><path d="M7 7l10 10M17 7 7 17"/></svg>不属实</span>Luna 不是第一个支持图片输入的决策模型。</p>
+        <p>Cloudflare 的 Clef 在 2026-10-01 上架，比 Luna 早 5 天，同样支持图片。Luna 是 OpenAI 的第一个决策模型，也是下表这些模型里上下文最长（105 万）、单次图片数最多（128 张）的。</p>
+
+        <h3 class="cmp-h3" id="img-models-h">OpenRouter 上支持图片输入的决策模型（2026-10-09）</h3>
+        <div class="cmp-table-wrap">
+          <div class="cmp-scroll" data-label="支持图片的决策模型表">
+            <table class="cmp-table is-models" aria-labelledby="img-models-h">
+              <thead>
+                <tr>
+                  <th scope="col">模型</th>
+                  <th scope="col" class="num">上架日期</th>
+                  <th scope="col" class="num">输入价格<span class="cmp-sub">每百万 token</span></th>
+                  <th scope="col" class="num">上下文</th>
+                  <th scope="col">图片限制</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row"><code>cloudflare/clef</code></th>
+                  <td class="num">2026-10-01</td>
+                  <td class="num">$0.24</td>
+                  <td class="num">65,536</td>
+                  <td>每次最多 4 张，每张建议小于约 300 KB；只读 <code>state</code> 文字的前约 2,000 token</td>
+                </tr>
+                <tr>
+                  <th scope="row"><code>cloudflare/clef-flash</code></th>
+                  <td class="num">2026-10-01</td>
+                  <td class="num">$0.021</td>
+                  <td class="num">65,536<span class="cmp-sub">服务商端点 16,384</span></td>
+                  <td>同上</td>
+                </tr>
+                <tr class="is-highlight">
+                  <th scope="row"><span class="cmp-dot is-luna" aria-hidden="true"></span><code>openai/gpt-6-luna-decisions</code></th>
+                  <td class="num">2026-10-06</td>
+                  <td class="num">$0.10</td>
+                  <td class="num">1,050,000</td>
+                  <td>每次最多 128 张</td>
+                </tr>
+                <tr>
+                  <th scope="row"><code>perplexity/pplx-decider-v1.1-27b</code></th>
+                  <td class="num">2026-10-07</td>
+                  <td class="num">$0.02</td>
+                  <td class="num">262,144</td>
+                  <td>文档未写</td>
+                </tr>
+                <tr class="is-muted">
+                  <th scope="row"><code>perplexity/pplx-decider-v1-27b</code></th>
+                  <td class="num" colspan="3">文档列出，但已不在目录中</td>
+                  <td><span aria-label="无">—</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <h3 class="cmp-h3">目录里全部 16 个决策模型条目</h3>
+        <p>按上架日期排列，含免费版和别名。<span class="cmp-tag is-img">图片</span> 表示支持图片输入。</p>
+        <ol class="cmp-timeline">
+          <li>
+            <time datetime="2026-09-18">09-18</time>
+            <div class="cmp-tl-items">
+              <span class="cmp-model is-jev"><span class="cmp-dot is-jev" aria-hidden="true"></span><code>typesafe/jev-1.13</code></span>
+              <span class="cmp-model"><code>~typesafe/jev-latest</code></span>
+            </div>
+          </li>
+          <li>
+            <time datetime="2026-09-25">09-25</time>
+            <div class="cmp-tl-items">
+              <span class="cmp-model"><code>kev-4b</code></span>
+            </div>
+          </li>
+          <li>
+            <time datetime="2026-09-26">09-26</time>
+            <div class="cmp-tl-items">
+              <span class="cmp-model">respan <code>span-01</code></span>
+              <span class="cmp-model">respan <code>span-01-lite</code></span>
+              <span class="cmp-model">respan <code>span-01-lite:free</code></span>
+            </div>
+          </li>
+          <li>
+            <time datetime="2026-09-28">09-28</time>
+            <div class="cmp-tl-items">
+              <span class="cmp-model">upstage <code>solar-decide</code></span>
+            </div>
+          </li>
+          <li>
+            <time datetime="2026-09-30">09-30</time>
+            <div class="cmp-tl-items">
+              <span class="cmp-model">inception <code>mercury-decide</code></span>
+              <span class="cmp-model">inception <code>mercury-decide:free</code></span>
+              <span class="cmp-model">together <code>tev1-4b-experimental</code></span>
+            </div>
+          </li>
+          <li>
+            <time datetime="2026-10-01">10-01</time>
+            <div class="cmp-tl-items">
+              <span class="cmp-model">cloudflare <code>clef</code><span class="cmp-tag is-img">图片</span></span>
+              <span class="cmp-model">cloudflare <code>clef-flash</code><span class="cmp-tag is-img">图片</span></span>
+              <span class="cmp-model">liquid <code>d1</code></span>
+            </div>
+          </li>
+          <li>
+            <time datetime="2026-10-06">10-06</time>
+            <div class="cmp-tl-items">
+              <span class="cmp-model is-luna"><span class="cmp-dot is-luna" aria-hidden="true"></span>openai <code>gpt-6-luna-decisions</code><span class="cmp-tag is-img">图片</span></span>
+            </div>
+          </li>
+          <li>
+            <time datetime="2026-10-07">10-07</time>
+            <div class="cmp-tl-items">
+              <span class="cmp-model">perplexity <code>pplx-decider-v1.1-27b</code><span class="cmp-tag is-img">图片</span></span>
+            </div>
+          </li>
+          <li>
+            <time datetime="2026-10-08">10-08</time>
+            <div class="cmp-tl-items">
+              <span class="cmp-model">upstage <code>solar-decide-flash</code></span>
+            </div>
+          </li>
+        </ol>
+        <p class="cmp-cite">来源：<a href="#src-catalog">OpenRouter 模型目录</a>、<a href="#src-multimodal">OpenRouter 多模态决策指南</a></p>
+      </section>
+
+      <!-- 11 ----------------------------------------------------------------- -->
+      <section id="in-app" class="card cmp-section" aria-labelledby="in-app-h">
+        <h2 id="in-app-h" class="cmp-h2"><span class="cmp-num" aria-hidden="true">11</span>在 Simple Jev 里使用 Luna</h2>
+        <p>Luna 和 Jev 一样通过 OpenRouter 调用，用同一个 OpenRouter API Key 即可。调用工具里新增了这些功能：</p>
+        <ol class="cmp-steps">
+          <li><strong>选模型。</strong>模型下拉框里新增“GPT-6 Luna Decisions（OpenAI，支持图片）”。</li>
+          <li><strong>加图片。</strong>背景内容下方可以点击选择、拖拽或粘贴图片。图片会在浏览器里压缩成最长边 1024 像素的 JPEG；每次最多 8 张（网页自己的限制，低于 Luna 的 128 张）。图片只在内存里，不保存到浏览器，点「清空」时一起清掉。</li>
+          <li><strong>只有支持图片的模型才能上传。</strong>选 Jev 这类纯文字模型时，图片区域会禁用并说明原因（Jev 收到图片会乱猜而不报错）。填自定义模型名称时，会去 OpenRouter 模型目录查它是否支持图片。</li>
+          <li><strong>选图片精度。</strong>可选自动 / 低 / 高；选“低”每张约 193 token。</li>
+          <li><strong>查看原始请求。</strong>原始请求和 curl 命令里的图片 base64 会截断显示。</li>
+          <li><strong>拒答提示。</strong>Luna 拒答时（HTTP 502 + “refused to answer”），会显示“模型拒绝回答这道题”，并说明重试没用、需要换个问法。</li>
+        </ol>
+        <p class="cmp-cta-row"><a class="cmp-cta" href="/">打开调用工具试试<svg viewBox="0 0 24 24" aria-hidden="true" class="cmp-icon"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></p>
+      </section>
+
+      <!-- 12 ----------------------------------------------------------------- -->
+      <section id="method" class="card cmp-section" aria-labelledby="method-h">
+        <h2 id="method-h" class="cmp-h2"><span class="cmp-num" aria-hidden="true">12</span>测试方法</h2>
+        <p>所有实测都在 2026-10-09 通过 OpenRouter 的 <code>POST https://openrouter.ai/api/alpha/decisions</code> 真实调用完成，全部实测总花费约 $0.01。</p>
+        <dl class="cmp-tests">
+          <div id="test-a">
+            <dt>实测 A</dt>
+            <dd>同一组 4 道文字题（猫的两道单选、工单是不是 bug 的是/否题、工单紧急程度 3 档打分）分别发给两个模型。</dd>
+          </div>
+          <div id="test-b">
+            <dt>实测 B</dt>
+            <dd>96×64 的 PNG 测试图（左半红、右半蓝、蓝色区域里有白色方块），3 道题；另测 <code>detail=low</code>、图片嵌在对象里、把图片发给 Jev。</dd>
+          </div>
+          <div id="test-c">
+            <dt>实测 C</dt>
+            <dd>同一请求放 128 / 1,024 / 2,048 / 4,096 道“数字 i 是不是偶数”的是/否题；64 选项单选 + 32 档打分。</dd>
+          </div>
+          <div id="test-d">
+            <dt>实测 D</dt>
+            <dd>16 / 64 选项单选；200 / 201 道题的边界；同一个小请求各 5 次计时。</dd>
+          </div>
+          <div id="test-e">
+            <dt>实测 E</dt>
+            <dd>512×384 / 1024×768 / 2048×1536 的 JPEG，配合 <code>detail</code> 的 auto / low / high；JSON 对象 + 图片；远程网址；129 张图；拒答探测。</dd>
+          </div>
+        </dl>
+        <p class="cmp-note">延迟、可用率和请求量是 OpenRouter 在 2026-10-09 查询时的统计，会随时间变化。回答风格只是一组题的结果，不能说明谁更准。</p>
+      </section>
+
+      <!-- 13 ----------------------------------------------------------------- -->
+      <section id="sources" class="card cmp-section" aria-labelledby="sources-h">
+        <h2 id="sources-h" class="cmp-h2"><span class="cmp-num" aria-hidden="true">13</span>来源</h2>
+        <ol class="cmp-sources">
+          <li id="src-catalog">
+            <p class="cmp-src-name">OpenRouter 模型目录 API（含各模型的端点列表与统计），2026-10-09 查询</p>
+            <a href="https://openrouter.ai/api/v1/models?output_modalities=decisions" target="_blank" rel="noopener noreferrer">https://openrouter.ai/api/v1/models?output_modalities=decisions</a>
+          </li>
+          <li id="src-multimodal">
+            <p class="cmp-src-name">OpenRouter 多模态决策指南</p>
+            <a href="https://openrouter.ai/docs/guides/community/multimodal-decisions" target="_blank" rel="noopener noreferrer">https://openrouter.ai/docs/guides/community/multimodal-decisions</a>
+          </li>
+          <li id="src-reference">
+            <p class="cmp-src-name">OpenRouter API 参考：Submit a decisions request</p>
+            <a href="https://openrouter.ai/docs/api/api-reference/alphadecisions/submit-a-decisions-request" target="_blank" rel="noopener noreferrer">https://openrouter.ai/docs/api/api-reference/alphadecisions/submit-a-decisions-request</a>
+          </li>
+          <li id="src-openai-guide">
+            <p class="cmp-src-name">OpenAI Decisions 指南</p>
+            <a href="https://developers.openai.com/api/docs/guides/decisions" target="_blank" rel="noopener noreferrer">https://developers.openai.com/api/docs/guides/decisions</a>
+          </li>
+          <li id="src-openai-data">
+            <p class="cmp-src-name">OpenAI 数据控制文档（“Storage requirements and retention controls per endpoint”一节）</p>
+            <a href="https://developers.openai.com/api/llms-full.txt" target="_blank" rel="noopener noreferrer">https://developers.openai.com/api/llms-full.txt</a>
+          </li>
+          <li id="src-tests">
+            <p class="cmp-src-name">我们的实测（实测 A–E，方法见<a href="#method">第 12 节</a>）</p>
+            <code>POST https://openrouter.ai/api/alpha/decisions</code>
+          </li>
+        </ol>
+      </section>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>Simple Jev · 本页数据截至 2026-10-09，模型、价格和限制可能变化，以 OpenRouter 和 OpenAI 的最新页面为准。</p>
+  </footer>
+</body>
+</html>
