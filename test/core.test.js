@@ -8,11 +8,16 @@ import {
   buildRequest,
   buildState,
   choiceHint,
+  dataUrlBytes,
   describeNoul,
   displayItems,
   formatUsd,
+  imageSupport,
+  isAnswerRefusedError,
   migrateLegacyForm,
+  modelShortName,
   normalizeKey,
+  redactImages,
   parseError,
   readAnswer,
   resolveEndpoint,
@@ -464,5 +469,109 @@ describe('buildCurl', () => {
   it('quotes the endpoint so shell metacharacters in it are inert', () => {
     const cmd = buildCurl("https://example.com/a;touch$IFS/tmp/x/alpha/decisions", {});
     assert.ok(cmd.startsWith("curl 'https://example.com/a;touch$IFS/tmp/x/alpha/decisions' \\"));
+  });
+});
+
+const PNG = 'data:image/png;base64,iVBORw0KGgo=';
+const JPG = 'data:image/jpeg;base64,/9j/4AAQ';
+
+describe('imageSupport', () => {
+  const catalog = [
+    { id: 'cloudflare/clef', canonical_slug: 'cloudflare/clef', architecture: { input_modalities: ['text', 'image'] } },
+    { id: 'liquid/d1', canonical_slug: 'liquid/d1-20260930', architecture: { input_modalities: ['text'] } },
+    { id: 'inception/mercury-decide:free', canonical_slug: 'inception/mercury-decide-20260930', architecture: { input_modalities: ['text'] } },
+  ];
+  it('knows the built-in models', () => {
+    assert.deepEqual(imageSupport('openai/gpt-6-luna-decisions', null), { supported: true, max: 8, source: 'builtin' });
+    assert.deepEqual(imageSupport('typesafe/jev-1.13', null), { supported: false, max: 0, source: 'builtin' });
+    assert.equal(imageSupport('~typesafe/jev-latest', null).supported, false);
+  });
+  it('looks other models up in the catalog, by id or dated slug', () => {
+    assert.deepEqual(imageSupport('cloudflare/clef', catalog), { supported: true, max: 4, source: 'catalog' });
+    assert.equal(imageSupport('liquid/d1-20260930', catalog).supported, false);
+    assert.equal(imageSupport('inception/mercury-decide:free', catalog).supported, false);
+  });
+  it('says "unknown" when the catalog has no entry', () => {
+    assert.equal(imageSupport('someone/new-model', catalog).supported, null);
+    assert.equal(imageSupport('someone/new-model', null).supported, null);
+  });
+});
+
+describe('buildState / buildRequest with images', () => {
+  const luna = { supported: true, max: 8 };
+  const form = (extra) => ({ ...baseForm, type: 'noul', model: 'openai/gpt-6-luna-decisions', imageSupport: luna, ...extra });
+
+  it('puts the text first and one top-level image part per image', () => {
+    const r = buildRequest(form({ context: '商品照片', images: [{ dataUrl: PNG }, { dataUrl: JPG }] }));
+    assert.equal(r.ok, true);
+    assert.equal(r.imageCount, 2);
+    assert.deepEqual(r.body.state, [
+      '商品照片',
+      { type: 'image_url', image_url: { url: PNG } },
+      { type: 'image_url', image_url: { url: JPG } },
+    ]);
+  });
+  it('falls back to the question as text, keeps JSON as an object, and adds detail only when not auto', () => {
+    const q = buildRequest(form({ images: [{ dataUrl: PNG }], imageDetail: 'low' }));
+    assert.deepEqual(q.body.state, [baseForm.question, { type: 'image_url', image_url: { url: PNG, detail: 'low' } }]);
+    const j = buildRequest(form({ context: '{"title":"红房子"}', images: [{ dataUrl: PNG }], imageDetail: 'auto' }));
+    assert.deepEqual(j.body.state[0], { title: '红房子' });
+    assert.deepEqual(j.body.state[1], { type: 'image_url', image_url: { url: PNG } });
+  });
+  it('leaves state unchanged without images', () => {
+    assert.equal(buildRequest(form({ images: [] })).body.state, baseForm.question);
+  });
+  it('refuses images for text-only models, too many images and bad data', () => {
+    const jev = buildRequest(form({ model: 'typesafe/jev-1.13', imageSupport: { supported: false, max: 0 }, images: [{ dataUrl: PNG }] }));
+    assert.ok(jev.errors.some((e) => e.field === 'images' && /只支持文字/.test(e.message)));
+    const many = buildRequest(form({ imageSupport: { supported: true, max: 1 }, images: [{ dataUrl: PNG }, { dataUrl: PNG }] }));
+    assert.ok(many.errors.some((e) => /最多发送 1 张/.test(e.message)));
+    const gif = buildRequest(form({ images: [{ dataUrl: 'data:image/gif;base64,R0lGOD' }] }));
+    assert.ok(gif.errors.some((e) => /PNG、JPEG 和 WebP/.test(e.message)));
+    const unknown = buildRequest(form({ imageSupport: { supported: null, max: 4 }, images: [{ dataUrl: PNG }] }));
+    assert.equal(unknown.ok, true);
+  });
+});
+
+describe('redactImages', () => {
+  it('shortens image data for display and leaves everything else alone', () => {
+    const body = { model: 'm', state: ['t', { type: 'image_url', image_url: { url: `data:image/png;base64,${'A'.repeat(4000)}` } }] };
+    const shown = redactImages(body);
+    assert.match(shown.state[1].image_url.url, /^data:image\/png;base64,…（图片数据已省略，约 3 KB）$/);
+    assert.equal(shown.state[0], 't');
+    assert.equal(body.state[1].image_url.url.length, 4022, 'original untouched');
+    assert.equal(redactImages(body, () => 'X').state[1].image_url.url, 'X');
+  });
+  it('estimates decoded sizes', () => {
+    assert.equal(dataUrlBytes('data:image/png;base64,AAAA'), 3);
+    assert.equal(dataUrlBytes('data:image/png;base64,AAA='), 2);
+  });
+  it('notes omitted images in the curl command', () => {
+    assert.match(buildCurl('https://x/alpha/decisions', {}, true), /^# 注意：命令里的图片数据已省略/);
+    assert.doesNotMatch(buildCurl('https://x/alpha/decisions', {}), /注意/);
+  });
+});
+
+describe('refusals', () => {
+  it('turns a refused question (OpenRouter 502) into a clear message', () => {
+    const e = parseError(502, JSON.stringify({ error: { message: 'OpenAI refused to answer question "orientation"', code: 502 } }));
+    assert.equal(e.title, '模型拒绝回答这道题');
+    assert.match(e.hint, /重试会得到同样的结果/);
+    assert.match(e.detail, /refused/);
+    assert.equal(parseError(502, '{"error":{"message":"Bad gateway"}}').title, '上游服务出错');
+  });
+  it('recognises a native refusal answer', () => {
+    assert.throws(
+      () => readAnswer('noul', { answers: { [QUESTION_KEY]: { type: 'refusal', refusal: 'no' } } }, displayItems('noul', {})),
+      (err) => isAnswerRefusedError(err),
+    );
+  });
+});
+
+describe('modelShortName', () => {
+  it('names the model in headlines', () => {
+    assert.equal(modelShortName('typesafe/jev-1.13-20260917'), 'Jev');
+    assert.equal(modelShortName('openai/gpt-6-luna-decisions-20261006'), 'GPT-6 Luna');
+    assert.equal(modelShortName('cloudflare/clef'), '模型');
   });
 });

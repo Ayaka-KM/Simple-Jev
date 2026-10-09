@@ -4,32 +4,39 @@ import {
   DEFAULT_BASE_URL,
   DEFAULT_MODEL,
   EXAMPLES,
+  IMAGE_DETAILS,
   LIMITS,
   MODELS,
   PLACEHOLDER_EXAMPLE,
+  REFUSAL_TEXT,
   TYPES,
   buildCurl,
   buildRequest,
   choiceHint,
+  dataUrlBytes,
   displayItems,
   formatUsd,
+  imageSupport,
+  isAnswerRefusedError,
   isAnswerShapeError,
   migrateLegacyForm,
+  modelShortName,
   normalizeKey,
   parseError,
   readAnswer,
+  redactImages,
   resolveEndpoint,
   scoreHint,
   validateKey,
 } from './core.js';
+import { initThemeToggle } from './theme-toggle.js';
 import { createViz, signatureOf } from './viz.js';
 
-// Every key this page stores starts with STORE_PREFIX (theme.js reads THEME_STORE too).
+// Every key this page stores starts with STORE_PREFIX (the theme key too: see theme-toggle.js).
 const STORE_PREFIX = 'simple-jev:';
 const FORM_STORE = 'simple-jev:form:v2';
 const LEGACY_FORM_STORE = 'simple-jev:form';
 const KEY_STORE = 'simple-jev:key';
-const THEME_STORE = 'simple-jev:theme';
 const CACHE_CLEARED_HASH = '#cache-cleared';
 const CUSTOM_MODEL = '__custom';
 const REQUEST_TIMEOUT_MS = 60_000;
@@ -122,6 +129,9 @@ function initialState() {
     noul: { trueText: '', falseText: '' },
     choice: blankChoice(),
     score: blankScore(),
+    // Images stay in memory only: never saved to the browser.
+    images: [],
+    imageDetail: 'auto',
   };
 }
 
@@ -158,6 +168,8 @@ function loadState() {
       noul: { trueText: str(s.noul?.trueText, ''), falseText: str(s.noul?.falseText, '') },
       choice: Array.isArray(s.choice) && s.choice.length ? toChoice(s.choice) : base.choice,
       score: Array.isArray(s.score) && s.score.length ? toScore(s.score) : base.score,
+      images: [],
+      imageDetail: IMAGE_DETAILS.includes(s.imageDetail) ? s.imageDetail : 'auto',
     };
   } catch {
     return base;
@@ -178,6 +190,7 @@ const saveState = debounce(() => {
       noul: state.noul,
       choice: state.choice.map(({ name, desc }) => ({ name, desc })),
       score: state.score.map(({ text }) => ({ text })),
+      imageDetail: state.imageDetail,
     }),
   );
 }, 250);
@@ -194,6 +207,14 @@ const modelSelect = $('model-select');
 const modelCustom = $('model-custom');
 const questionInput = $('question');
 const contextInput = $('context');
+const imageField = $('image-field');
+const imageList = $('image-list');
+const imageAdd = $('image-add');
+const imageInput = $('image-input');
+const imageHint = $('image-hint');
+const imageCount = $('image-count');
+const imageDetailRow = $('image-detail-row');
+const imageDetail = $('image-detail');
 const noulTrue = $('noul-true');
 const noulFalse = $('noul-false');
 const choiceList = $('choice-list');
@@ -219,31 +240,7 @@ let pendingRefresh = false; // options or type changed while a call was in fligh
 
 // ---- theme ---------------------------------------------------------------
 
-const THEME_LABEL = { auto: '跟随系统', light: '浅色', dark: '深色' };
-const themeBtn = $('theme-toggle');
-
-const THEME_COLOR = { light: '#f6f5f1', dark: '#0d0d0d' };
-
-function applyTheme(mode) {
-  if (mode === 'light' || mode === 'dark') document.documentElement.dataset.theme = mode;
-  else delete document.documentElement.dataset.theme;
-  // Keep the browser chrome in step with a manual override.
-  for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
-    const own = meta.media.includes('dark') ? 'dark' : 'light';
-    meta.content = THEME_COLOR[mode === 'auto' ? own : mode];
-  }
-  themeBtn.dataset.mode = mode;
-  $('theme-label').textContent = THEME_LABEL[mode];
-  themeBtn.setAttribute('aria-label', `切换主题：当前为${THEME_LABEL[mode]}`);
-}
-
-themeBtn.addEventListener('click', () => {
-  const order = ['auto', 'light', 'dark'];
-  const next = order[(order.indexOf(themeBtn.dataset.mode) + 1) % order.length];
-  if (next === 'auto') storage.remove(THEME_STORE);
-  else storage.set(THEME_STORE, next);
-  applyTheme(next);
-});
+initThemeToggle($('theme-toggle'), $('theme-label'));
 
 // ---- connection fields ---------------------------------------------------
 
@@ -263,6 +260,7 @@ baseUrlInput.addEventListener('input', () => {
   state.baseUrl = baseUrlInput.value;
   baseUrlInput.removeAttribute('aria-invalid');
   renderEndpoint();
+  onModelChanged();
   saveState();
 });
 
@@ -311,6 +309,7 @@ modelSelect.addEventListener('change', () => {
   modelCustom.hidden = !custom;
   if (custom) modelCustom.focus();
   state.model = currentModel();
+  onModelChanged();
   markStale();
   saveState();
 });
@@ -318,9 +317,16 @@ modelSelect.addEventListener('change', () => {
 modelCustom.addEventListener('input', () => {
   modelCustom.removeAttribute('aria-invalid');
   state.model = currentModel();
+  onModelChanged();
   markStale();
   saveState();
 });
+
+// Whether images can be sent depends on the model; names we don't know are looked up.
+function onModelChanged() {
+  if (currentModel() && !MODELS.some((m) => m.id === currentModel())) loadCatalog();
+  renderImageField();
+}
 
 // ---- question fields -----------------------------------------------------
 
@@ -399,9 +405,17 @@ function clearInputs() {
     noul: { trueText: '', falseText: '' },
     choice: blankChoice(),
     score: blankScore(),
+    images: [],
   };
   const content = (s) =>
-    JSON.stringify([s.question, s.context, s.noul, s.choice.map((o) => [o.name, o.desc]), s.score.map((l) => l.text)]);
+    JSON.stringify([
+      s.question,
+      s.context,
+      s.noul,
+      s.choice.map((o) => [o.name, o.desc]),
+      s.score.map((l) => l.text),
+      s.images.map((img) => img.id),
+    ]);
   // Already blank (e.g. a double click): keep any pending undo of the real content.
   if (content(state) === content(blank)) {
     questionInput.focus();
@@ -413,7 +427,9 @@ function clearInputs() {
     noul: { ...state.noul },
     choice: state.choice.map((o) => ({ ...o })),
     score: state.score.map((l) => ({ ...l })),
+    images: state.images.slice(),
   };
+  imageMessage = '';
   Object.assign(state, blank);
   renderAll();
   saveState();
@@ -438,6 +454,9 @@ form.addEventListener('input', dismissUndo);
 
 function loadExample(ex) {
   dismissUndo();
+  // Examples are text only; images belong to the question they were added for.
+  state.images = [];
+  imageMessage = '';
   state.type = ex.type;
   state.question = ex.question;
   state.context = ex.context ?? '';
@@ -448,6 +467,226 @@ function loadExample(ex) {
   renderAll();
   saveState();
 }
+
+// ---- images ----------------------------------------------------------------
+
+// OpenRouter's model list, fetched once, to tell whether a custom model name takes images.
+let catalog = null;
+let catalogStatus = 'idle'; // idle | loading | ready | failed
+
+function openRouterOrigin() {
+  const r = resolveEndpoint(state.baseUrl);
+  if (!r.ok) return null;
+  const url = new URL(r.url);
+  return /(^|\.)openrouter\.ai$/i.test(url.hostname) ? url.origin : null;
+}
+
+async function loadCatalog() {
+  const origin = openRouterOrigin();
+  if (catalogStatus !== 'idle' || !origin) return;
+  catalogStatus = 'loading';
+  renderImageField();
+  try {
+    const res = await fetch(`${origin}/api/v1/models?output_modalities=decisions`, {
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer',
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const list = (await res.json())?.data;
+    catalog = Array.isArray(list) ? list : [];
+    catalogStatus = 'ready';
+  } catch {
+    catalogStatus = 'failed';
+  }
+  renderImageField();
+}
+
+// { supported: true | false | null (unknown), max, checking }
+function currentImageSupport() {
+  const support = imageSupport(currentModel(), catalog);
+  if (support.source === 'unknown' && catalogStatus === 'loading' && openRouterOrigin()) return { ...support, checking: true };
+  return support;
+}
+
+let imageUid = 0;
+let imageMessage = ''; // problems from the last add, shown under the field until the next change
+const MAX_SIDE = 1024; // longest side sent; about 770 tokens per image with GPT-6 Luna
+const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const KEEP_ORIGINAL_BYTES = 400 * 1024;
+const SENDABLE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+
+const formatKB = (bytes) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+
+function readAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+// Small PNG/JPEG/WebP files are sent as they are; anything larger or in another format
+// (HEIC, GIF, BMP… whatever the browser can decode) becomes a JPEG at most MAX_SIDE wide.
+async function prepareImage(file) {
+  if (file.size > MAX_FILE_BYTES) throw new Error('文件超过 20 MB');
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    throw new Error('无法读取这张图片，请换成 PNG、JPEG 或 WebP');
+  }
+  const { width, height } = bitmap;
+  const scale = Math.min(1, MAX_SIDE / Math.max(width, height));
+  let dataUrl;
+  let w = width;
+  let h = height;
+  if (scale === 1 && SENDABLE_TYPES.includes(file.type) && file.size <= KEEP_ORIGINAL_BYTES) {
+    dataUrl = await readAsDataUrl(file);
+  } else {
+    w = Math.max(1, Math.round(width * scale));
+    h = Math.max(1, Math.round(height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff'; // JPEG has no transparency
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+  }
+  bitmap.close?.();
+  return { id: `img${++imageUid}`, name: file.name || '粘贴的图片', dataUrl, width: w, height: h, bytes: dataUrlBytes(dataUrl) };
+}
+
+async function addImages(fileList) {
+  const files = [...(fileList ?? [])].filter((f) => f.type.startsWith('image/'));
+  if (!files.length) return;
+  const support = currentImageSupport();
+  if (support.supported === false) {
+    imageMessage = `${currentModel()} 只支持文字，不能添加图片。`;
+    renderImageField();
+    return;
+  }
+  const room = support.max - state.images.length;
+  const problems = [];
+  if (files.length > room) problems.push(`每次最多 ${support.max} 张，多出的 ${files.length - Math.max(0, room)} 张没有添加`);
+  for (const file of files.slice(0, Math.max(0, room))) {
+    try {
+      state.images.push(await prepareImage(file));
+    } catch (err) {
+      problems.push(`${file.name || '图片'}：${err.message}`);
+    }
+  }
+  imageMessage = problems.join('；');
+  onImagesEdited();
+}
+
+function removeImage(id) {
+  const i = state.images.findIndex((img) => img.id === id);
+  if (i < 0) return;
+  state.images.splice(i, 1);
+  imageMessage = '';
+  onImagesEdited();
+  // Keep keyboard focus nearby after the list re-renders.
+  const next = imageList.children[Math.min(i, state.images.length - 1)];
+  (next?.querySelector('button') ?? imageAdd).focus();
+}
+
+function onImagesEdited() {
+  dismissUndo();
+  hideFormErrors();
+  renderImageField();
+  markStale();
+}
+
+function renderImageField() {
+  const support = currentImageSupport();
+  const n = state.images.length;
+  const blocked = support.supported === false;
+  imageField.classList.toggle('is-disabled', blocked);
+  imageList.classList.toggle('is-unsent', blocked && n > 0);
+  imageAdd.disabled = blocked || n >= support.max;
+  imageAdd.textContent = !blocked && n >= support.max ? `最多 ${support.max} 张` : '＋ 添加图片';
+  imageCount.textContent = n ? `${n} / ${blocked ? 0 : support.max} 张` : '';
+  imageDetailRow.hidden = n === 0 || blocked;
+
+  imageList.replaceChildren(
+    ...state.images.map((img, i) => {
+      const li = el('li', 'image-item');
+      const pic = el('img');
+      pic.src = img.dataUrl;
+      pic.alt = `图片 ${i + 1}：${img.name}`;
+      const meta = el('span', 'image-meta', `${img.width}×${img.height} · ${formatKB(img.bytes)}`);
+      const remove = el('button', 'mini-btn image-remove', '×');
+      remove.type = 'button';
+      remove.setAttribute('aria-label', `删除图片 ${i + 1}`);
+      remove.title = '删除这张图片';
+      remove.addEventListener('click', () => removeImage(img.id));
+      li.append(pic, meta, remove);
+      return li;
+    }),
+  );
+
+  const model = currentModel() || '这个模型';
+  let text;
+  if (blocked) {
+    text = `${model} 只支持文字，看不到图片。要判断图片，请在上方「模型」里选择 GPT-6 Luna Decisions。`;
+    if (n) text += `已添加的 ${n} 张图片不会发送，请删除，或换用支持图片的模型。`;
+  } else if (support.checking) {
+    text = '正在查询这个模型是否支持图片…';
+  } else if (support.supported === null) {
+    text = `无法确认「${model}」是否支持图片。不支持图片的模型通常不会报错，而是给出没有根据的结果。`;
+  } else {
+    text = `点「添加图片」、把图片拖到这里，或直接粘贴（Ctrl+V）。图片会在浏览器里压缩后发送，最多 ${support.max} 张；不会保存，刷新页面后需要重新添加。`;
+  }
+  imageHint.textContent = imageMessage ? `${imageMessage}。${text}` : text;
+  imageHint.classList.toggle('is-error', Boolean(imageMessage));
+}
+
+imageAdd.addEventListener('click', () => imageInput.click());
+imageInput.addEventListener('change', async () => {
+  await addImages(imageInput.files);
+  imageInput.value = ''; // allow picking the same file again
+});
+
+imageDetail.addEventListener('change', () => {
+  state.imageDetail = IMAGE_DETAILS.includes(imageDetail.value) ? imageDetail.value : 'auto';
+  markStale();
+  saveState();
+});
+
+// Dropping files anywhere on the page must not navigate away from the form; only the
+// question card accepts them.
+const dropZone = imageField.closest('.card');
+const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files');
+for (const type of ['dragover', 'drop']) {
+  document.addEventListener(type, (e) => {
+    if (hasFiles(e) && !dropZone.contains(e.target)) e.preventDefault();
+  });
+}
+dropZone.addEventListener('dragover', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dropZone.classList.add('is-dragover');
+});
+dropZone.addEventListener('dragleave', (e) => {
+  if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove('is-dragover');
+});
+dropZone.addEventListener('drop', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dropZone.classList.remove('is-dragover');
+  addImages(e.dataTransfer.files);
+});
+
+// Pasting an image anywhere adds it (text pastes are left alone).
+document.addEventListener('paste', (e) => {
+  const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
+  if (!files.length) return;
+  e.preventDefault();
+  addImages(files);
+});
 
 // ---- option editors ------------------------------------------------------
 
@@ -663,9 +902,18 @@ function refreshPreview() {
 }
 
 // What the form would send right now, to compare with the request on screen.
+// The request the form would send now (images and their support come from page state).
+function requestFromForm() {
+  return buildRequest({ ...state, model: currentModel(), imageSupport: currentImageSupport() });
+}
+
+// Images are fingerprinted (length + tail) so comparing snapshots stays cheap.
+const fingerprint = (url) => `${url.length}:${url.slice(-24)}`;
+const snapshotOf = (built) => JSON.stringify([redactImages(built.body, fingerprint), built.items]);
+
 function formSnapshot() {
-  const built = buildRequest({ ...state, model: currentModel() });
-  return built.ok ? JSON.stringify([built.body, built.items]) : 'invalid';
+  const built = requestFromForm();
+  return built.ok ? snapshotOf(built) : 'invalid';
 }
 
 function markStale() {
@@ -696,14 +944,18 @@ function revealResult(target) {
   window.scrollBy({ top: delta, behavior });
 }
 
-function showMeta(json, ms, stateSource) {
+function showMeta(json, ms, stateSource, imageCount = 0, detail = 'auto') {
   const rows = [
     ['耗时', `${ms} ms`],
     ['费用', formatUsd(json?.usage?.cost)],
     ['输入 tokens', json?.usage?.input_tokens ?? '—'],
     ['服务商', json?.provider ?? '—'],
     ['输出 tokens（免费）', json?.usage?.output_tokens ?? '—'],
-    ['判断材料', { question: '问题本身（背景内容为空）', text: '背景内容（文本）', json: '背景内容（JSON）' }[stateSource] ?? '—'],
+    [
+      '判断材料',
+      ({ question: '问题本身（背景内容为空）', text: '背景内容（文本）', json: '背景内容（JSON）' }[stateSource] ?? '—') +
+        (imageCount ? ` + ${imageCount} 张图片（精度：${{ auto: '自动', low: '低', high: '高' }[detail] ?? '自动'}）` : ''),
+    ],
     ['模型', json?.model ?? '—', 'wide mono'],
     ['生成 ID', json?.id ?? '—', 'wide mono'],
   ];
@@ -718,9 +970,10 @@ function showMeta(json, ms, stateSource) {
   resultMeta.hidden = false;
 }
 
-function showRaw(body, endpoint, responseText) {
-  $('raw-request').textContent = JSON.stringify(body, null, 2);
-  $('raw-curl').textContent = buildCurl(endpoint, body);
+function showRaw(body, endpoint, responseText, imageCount = 0) {
+  const shown = imageCount ? redactImages(body) : body;
+  $('raw-request').textContent = JSON.stringify(shown, null, 2);
+  $('raw-curl').textContent = buildCurl(endpoint, shown, imageCount > 0);
   let pretty = responseText ?? '';
   try {
     pretty = JSON.stringify(JSON.parse(responseText), null, 2);
@@ -773,6 +1026,7 @@ const FIELD_INPUT = {
   apiKey: () => keyInput,
   model: () => (modelSelect.value === CUSTOM_MODEL ? modelCustom : modelSelect),
   question: () => questionInput,
+  images: () => imageAdd.disabled ? imageList.querySelector('button') ?? imageAdd : imageAdd,
   // Marks the rows the error names (duplicates, unnamed or blank rows) and returns the first.
   options: (err) => {
     const list = state.type === 'choice' ? choiceList : scoreList;
@@ -817,7 +1071,7 @@ function showFormErrors(errors) {
   for (const err of errors) {
     const input = FIELD_INPUT[err.field]?.(err);
     if (!input) continue;
-    if (err.field !== 'options') input.setAttribute('aria-invalid', 'true');
+    if (err.field !== 'options' && err.field !== 'images') input.setAttribute('aria-invalid', 'true');
     first ??= input;
   }
   first?.focus();
@@ -839,7 +1093,7 @@ async function submit() {
 
   const endpoint = resolveEndpoint(state.baseUrl);
   const key = normalizeKey(keyInput.value);
-  const built = buildRequest({ ...state, model: currentModel() });
+  const built = requestFromForm();
   const errors = [];
   if (!endpoint.ok) errors.push({ field: 'baseUrl', message: endpoint.error });
   const keyError = validateKey(key);
@@ -852,7 +1106,10 @@ async function submit() {
 
   const type = state.type;
   const items = built.items;
-  const sent = { snapshot: JSON.stringify([built.body, built.items]), question: state.question.trim() };
+  const sent = { snapshot: snapshotOf(built), question: state.question.trim() };
+  const imageCount = built.imageCount ?? 0;
+  const detail = state.imageDetail;
+  const modelName = modelShortName(built.body.model);
   // The request already includes every edit, so a preview refresh still waiting
   // on its debounce must not fire later and wipe this call's result.
   refreshPreviewSoon.cancel();
@@ -865,7 +1122,7 @@ async function submit() {
   // Blank rows are not sent, so rebuild the bars if they differ from what is sent;
   // otherwise shrink the previous result back to 0 while waiting.
   if (signatureOf(type, items) !== viz.signature()) viz.build(type, items);
-  const drained = viz.drain();
+  const drained = viz.drain(modelName);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -908,7 +1165,7 @@ async function submit() {
     renderQuestionEcho();
     viz.clear(['还没有结果', '这次调用没有成功，原因见上方。修改后可以再试一次。']);
     showResultError(error);
-    showRaw(built.body, endpoint.url, responseText);
+    showRaw(built.body, endpoint.url, responseText, imageCount);
     revealResult(resultError);
   };
 
@@ -923,20 +1180,25 @@ async function submit() {
   } catch (err) {
     return fail(
       {
-        title: '无法识别返回内容',
-        hint: '服务返回了成功状态，但内容不是预期的 Jev 格式。请检查 Base URL 是否指向 Jev 的 Decisions 接口。',
-        detail: isAnswerShapeError(err) ? err.message : '返回的内容不是有效的 JSON',
+        ...(isAnswerRefusedError(err)
+          ? { ...REFUSAL_TEXT, detail: err.message }
+          : {
+              title: '无法识别返回内容',
+              hint: '服务返回了成功状态，但内容不是预期的决策结果格式。请检查 Base URL 是否指向 Decisions 接口。',
+              detail: isAnswerShapeError(err) ? err.message : '返回的内容不是有效的 JSON',
+            }),
       },
       text,
     );
   }
+  result.by = modelShortName(json?.model ?? built.body.model);
 
   // Edits made while the call was in flight show up as a stale marker on this result.
   pendingRefresh = false;
   lastSent = sent;
   setStatus('done');
-  showMeta(json, ms, built.stateSource);
-  showRaw(built.body, endpoint.url, text);
+  showMeta(json, ms, built.stateSource, imageCount, detail);
+  showRaw(built.body, endpoint.url, text, imageCount);
   markStale();
   // Aim at the bar (or score ruler), not the whole viz, which can be taller than the screen.
   revealResult($('viz').querySelector('.bar, .ruler') ?? $('viz'));
@@ -987,11 +1249,12 @@ function renderAll() {
   contextInput.value = state.context;
   renderQuestionEcho();
   renderOptions();
+  imageDetail.value = state.imageDetail;
+  onModelChanged();
   hideFormErrors();
   refreshPreview();
 }
 
-applyTheme(['light', 'dark'].includes(storage.get(THEME_STORE)) ? storage.get(THEME_STORE) : 'auto');
 // Set both explicitly: some browsers restore typed values and checkboxes on reload,
 // which would bring a key (or the remember box) back after clearing the cache.
 const savedKey = storage.get(KEY_STORE);

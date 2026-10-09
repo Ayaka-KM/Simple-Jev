@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Simple Jev · 可视化调用 Jev 决策模型</title>
-  <meta name="description" content="不用命令行，在浏览器里调用 TypeSafe 的 Jev 决策模型：是/否、单选、打分三种题型，结果以动画概率条显示。">
+  <title>Simple Jev · 可视化调用决策模型</title>
+  <meta name="description" content="不用命令行，在浏览器里调用 Jev、GPT-6 Luna Decisions 等决策模型：是/否、单选、打分三种题型，支持图片输入，结果以动画概率条显示。">
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
@@ -23,15 +23,21 @@
       </svg>
       <div>
         <h1>Simple Jev</h1>
-        <p class="tagline">在浏览器里调用 Jev 决策模型，不用命令行</p>
+        <p class="tagline">在浏览器里调用 Jev、GPT-6 Luna 等决策模型，不用命令行</p>
       </div>
     </div>
+    <div class="header-actions">
+    <a href="/compare.html" id="compare-link" class="icon-btn" aria-label="模型对比：GPT-6 Luna Decisions 与 Jev 详细对比">
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="icon-static"><path d="M3 20h18M6 20V11M11 20V5M16 20v-6M21 20V9"/></svg>
+      <span class="icon-btn-label">模型对比</span>
+    </a>
     <button type="button" id="theme-toggle" class="icon-btn" aria-label="切换主题：跟随系统">
       <svg viewBox="0 0 24 24" aria-hidden="true" class="icon icon-auto"><path d="M12 3a9 9 0 1 0 0 18V3Z"/><circle cx="12" cy="12" r="9" fill="none"/></svg>
       <svg viewBox="0 0 24 24" aria-hidden="true" class="icon icon-light"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" fill="none"/></svg>
       <svg viewBox="0 0 24 24" aria-hidden="true" class="icon icon-dark"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z"/></svg>
       <span id="theme-label" class="icon-btn-label">跟随系统</span>
     </button>
+    </div>
   </header>
 
   <main class="layout">
@@ -104,8 +110,28 @@
           </div>
           <div class="field">
             <label for="context">背景内容 <span class="opt">选填</span></label>
-            <textarea id="context" name="context" rows="3" placeholder="要让 Jev 判断的材料，比如一段客户留言。不填就直接拿问题本身来判断。"></textarea>
+            <textarea id="context" name="context" rows="3" placeholder="要让模型判断的材料，比如一段客户留言。不填就直接拿问题本身来判断。"></textarea>
             <p class="hint">如果填的是 JSON 对象或数组，会作为结构化数据发送。</p>
+          </div>
+          <div class="field" id="image-field">
+            <div class="field-head">
+              <span class="field-label" id="image-label">图片 <span class="opt">选填</span></span>
+              <span class="image-count" id="image-count"></span>
+            </div>
+            <div class="image-drop" id="image-drop">
+              <ul class="image-list" id="image-list" aria-labelledby="image-label"></ul>
+              <button type="button" class="add-btn image-add" id="image-add" aria-describedby="image-hint">＋ 添加图片</button>
+              <input type="file" id="image-input" accept="image/png,image/jpeg,image/webp,image/*" multiple hidden>
+            </div>
+            <p class="hint" id="image-hint" aria-live="polite"></p>
+            <div class="image-detail-row" id="image-detail-row">
+              <label for="image-detail">图片精度</label>
+              <select id="image-detail">
+                <option value="auto">自动（默认）</option>
+                <option value="low">低：更便宜，每张约 200 token</option>
+                <option value="high">高：看清更多细节</option>
+              </select>
+            </div>
           </div>
         </section>
 
@@ -113,7 +139,7 @@
           <h2 id="opt-title" class="card-title"><span class="step">4</span><span id="opt-title-text">可选答案</span></h2>
 
           <div id="options-noul" class="options" hidden>
-            <p class="hint">Jev 会给出“是”的概率。下面两项可以不填，填了能让判断标准更明确。</p>
+            <p class="hint">模型会给出“是”的概率。下面两项可以不填，填了能让判断标准更明确。</p>
             <div class="field">
               <label for="noul-true"><span class="swatch s1" aria-hidden="true"></span>“是”表示 <span class="opt">选填</span></label>
               <input id="noul-true" type="text" autocomplete="off" placeholder="例如：客户描述了产品出错的行为">
@@ -125,7 +151,7 @@
           </div>
 
           <div id="options-choice" class="options" hidden>
-            <p class="hint">每个选项填一个名称；说明可以不填，填了 Jev 更清楚什么情况该选它。</p>
+            <p class="hint">每个选项填一个名称；说明可以不填，填了模型更清楚什么情况该选它。</p>
             <ol id="choice-list" class="option-list"></ol>
             <button type="button" id="add-choice" class="add-btn">＋ 添加选项</button>
           </div>
@@ -151,9 +177,9 @@
       </form>
 
       <aside class="card about">
-        <h2 class="card-title">关于 Jev</h2>
-        <p>Jev 是 TypeSafe 的<strong>决策模型</strong>：它不写文字、不解释理由，只在你给定的选项之间分配概率。答案好不好，很大程度取决于选项怎么写。</p>
-        <p class="hint">按输入 token 计费，输出免费；一次调用通常不到 $0.0001。<a href="https://openrouter.ai/docs/guides/community/jev" target="_blank" rel="noopener noreferrer">查看官方文档</a></p>
+        <h2 class="card-title">关于决策模型</h2>
+        <p>Jev 和 GPT-6 Luna Decisions 都是<strong>决策模型</strong>：它们不写文字、不解释理由，只在你给定的选项之间分配概率。答案好不好，很大程度取决于选项怎么写。只有 GPT-6 Luna Decisions 能看图片。</p>
+        <p class="hint">都只按输入 token 计费，输出免费；一次调用通常不到 $0.0001。两者的详细区别见<a href="/compare.html">模型对比</a>，也可以看 <a href="https://openrouter.ai/docs/guides/community/jev" target="_blank" rel="noopener noreferrer">Jev 文档</a>和 <a href="https://openrouter.ai/docs/guides/community/multimodal-decisions" target="_blank" rel="noopener noreferrer">图片输入文档</a>。</p>
       </aside>
     </div>
 

@@ -6,10 +6,35 @@ export const DECISIONS_PATH = '/alpha/decisions';
 export const QUESTION_KEY = 'decision';
 export const DEFAULT_MODEL = 'typesafe/jev-1.13';
 
+// `images` is how many images the model takes per request (0 = text only).
 export const MODELS = [
-  { id: 'typesafe/jev-1.13', label: 'Jev 1.13（当前版本）' },
-  { id: '~typesafe/jev-latest', label: 'Jev Latest（自动跟随最新版）' },
+  { id: 'typesafe/jev-1.13', label: 'Jev 1.13（只支持文字）', images: 0 },
+  { id: '~typesafe/jev-latest', label: 'Jev Latest（自动跟随最新版，只支持文字）', images: 0 },
+  { id: 'openai/gpt-6-luna-decisions', label: 'GPT-6 Luna Decisions（OpenAI，支持图片）', images: 128 },
 ];
+
+// The page sends at most this many images per call, whatever the model allows.
+export const UI_MAX_IMAGES = 8;
+// Image limits OpenRouter documents for image-capable models outside MODELS.
+const KNOWN_IMAGE_LIMITS = { 'cloudflare/clef': 4, 'cloudflare/clef-flash': 4 };
+const DEFAULT_IMAGE_LIMIT = 4;
+export const IMAGE_DETAILS = ['auto', 'low', 'high'];
+const IMAGE_DATA_URL = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
+
+// Whether `modelId` takes images, and how many this page will send.
+// `catalog` is OpenRouter's model list (GET /api/v1/models), or null if unavailable.
+// supported: true / false, or null when the model is unknown (custom name, no catalog).
+export function imageSupport(modelId, catalog) {
+  const id = String(modelId ?? '').trim();
+  const known = MODELS.find((m) => m.id === id);
+  if (known) return { supported: known.images > 0, max: Math.min(UI_MAX_IMAGES, known.images), source: 'builtin' };
+  const entry = (catalog ?? []).find((m) => m?.id === id || m?.canonical_slug === id);
+  if (!entry) return { supported: null, max: Math.min(UI_MAX_IMAGES, DEFAULT_IMAGE_LIMIT), source: 'unknown' };
+  const supported = Boolean(entry.architecture?.input_modalities?.includes('image'));
+  const base = String(entry.id).replace(/:[^/]*$/, '');
+  const limit = MODELS.find((m) => m.id === base)?.images || KNOWN_IMAGE_LIMITS[base] || DEFAULT_IMAGE_LIMIT;
+  return { supported, max: supported ? Math.min(UI_MAX_IMAGES, limit) : 0, source: 'catalog' };
+}
 
 export const TYPES = ['noul', 'choice', 'score'];
 
@@ -72,7 +97,7 @@ export function validateKey(key) {
 
 // Jev requires `state`. Empty context falls back to the question itself; text that
 // parses as a JSON object or array is sent as structured data.
-export function buildState(context, question) {
+function textState(context, question) {
   const text = String(context ?? '').trim();
   if (!text) return { state: question, source: 'question' };
   if (/^[[{]/.test(text)) {
@@ -84,6 +109,18 @@ export function buildState(context, question) {
     }
   }
   return { state: text, source: 'text' };
+}
+
+// With images, `state` becomes an array: the text (or JSON) first, then one
+// image_url part per image. Image parts must sit at the top level of that array.
+export function buildState(context, question, images = [], detail = 'auto') {
+  const base = textState(context, question);
+  if (!images.length) return base;
+  const parts = images.map((img) => ({
+    type: 'image_url',
+    image_url: detail === 'low' || detail === 'high' ? { url: img.dataUrl, detail } : { url: img.dataUrl },
+  }));
+  return { state: [base.state, ...parts], source: base.source };
 }
 
 const clean = (s) => String(s ?? '').trim();
@@ -198,15 +235,51 @@ export function buildRequest(form) {
     items = levels.map((label, i) => ({ key: String(i), label, desc: '', slot: 1 }));
   }
 
+  const images = form.images ?? [];
+  if (images.length) {
+    const support = form.imageSupport ?? { supported: null, max: UI_MAX_IMAGES };
+    if (support.supported === false) {
+      errors.push({
+        field: 'images',
+        message: `${model || '这个模型'} 只支持文字，不能发送图片：请删除图片，或换用支持图片的模型（如 GPT-6 Luna Decisions）`,
+      });
+    } else if (images.length > support.max) {
+      errors.push({ field: 'images', message: `这个模型每次最多发送 ${support.max} 张图片` });
+    }
+    if (images.some((img) => !IMAGE_DATA_URL.test(String(img?.dataUrl ?? '')))) {
+      errors.push({ field: 'images', message: '有图片格式不对，只支持 PNG、JPEG 和 WebP' });
+    }
+  }
+
   if (errors.length) return { ok: false, errors };
-  const { state, source } = buildState(form.context, question);
+  const detail = IMAGE_DETAILS.includes(form.imageDetail) ? form.imageDetail : 'auto';
+  const { state, source } = buildState(form.context, question, images, detail);
   return {
     ok: true,
     errors: [],
     items,
     stateSource: source,
+    imageCount: images.length,
     body: { model, state, questions: { [QUESTION_KEY]: q } },
   };
+}
+
+const formatKB = (bytes) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+
+// Approximate decoded size of a base64 data URL.
+export function dataUrlBytes(url) {
+  const b64 = String(url).slice(String(url).indexOf(',') + 1);
+  return Math.floor((b64.length * 3) / 4) - (b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0);
+}
+
+// A copy of a request body with image data URLs swapped for `replace(url)`; by default a
+// short placeholder, so the raw-request view and curl stay readable.
+export function redactImages(body, replace = (url) => `${url.slice(0, url.indexOf(',') + 1)}…（图片数据已省略，约 ${formatKB(dataUrlBytes(url))}）`) {
+  return JSON.parse(
+    JSON.stringify(body, (key, value) =>
+      key === 'url' && typeof value === 'string' && value.startsWith('data:image/') ? replace(value) : value,
+    ),
+  );
 }
 
 const clamp01 = (n) => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
@@ -242,6 +315,11 @@ function toShares(values) {
 }
 
 class AnswerShapeError extends Error {}
+class AnswerRefusedError extends Error {}
+
+export function isAnswerRefusedError(err) {
+  return err instanceof AnswerRefusedError;
+}
 
 // Reads the answer for our single question and lines it up with the options the
 // user entered (the API does not keep option order). `items` comes from
@@ -249,6 +327,8 @@ class AnswerShapeError extends Error {}
 export function readAnswer(type, json, items) {
   const answer = json?.answers?.[QUESTION_KEY];
   if (!answer || typeof answer !== 'object') throw new AnswerShapeError('返回内容里没有找到答案');
+  // OpenAI's own Decisions API marks a refused question with type "refusal".
+  if (answer.type === 'refusal') throw new AnswerRefusedError(String(answer.refusal ?? answer.reason ?? ''));
   if (answer.type && answer.type !== type) {
     throw new AnswerShapeError(`返回的题型（${answer.type}）和请求的题型（${type}）不一致`);
   }
@@ -331,6 +411,14 @@ export function isAnswerShapeError(err) {
   return err instanceof AnswerShapeError;
 }
 
+// A short name for headlines such as "Jev 的选择", from a model id.
+export function modelShortName(id) {
+  const s = String(id ?? '').toLowerCase();
+  if (s.includes('jev')) return 'Jev';
+  if (s.includes('gpt-6-luna')) return 'GPT-6 Luna';
+  return '模型';
+}
+
 // Plain-language reading of a yes/no probability.
 export function describeNoul(p) {
   if (p >= 0.9) return { text: '几乎可以肯定：是', lean: 'true' };
@@ -380,8 +468,15 @@ function formatIssues(message) {
   }
 }
 
+// Shown when a model declines a question. Through OpenRouter, Luna's refusals arrive
+// as an HTTP 502 whose message says the question was refused.
+export const REFUSAL_TEXT = {
+  title: '模型拒绝回答这道题',
+  hint: '这是模型的内容安全策略在起作用（比如问题涉及敏感的个人信息）。重试会得到同样的结果，请换个问法，或换一个模型。',
+};
+
 export function parseError(status, bodyText) {
-  const [title, hint] = STATUS_TEXT[status] ?? [`请求失败（HTTP ${status}）`, '稍后再试，或检查 Base URL 是否正确。'];
+  let [title, hint] = STATUS_TEXT[status] ?? [`请求失败（HTTP ${status}）`, '稍后再试，或检查 Base URL 是否正确。'];
   let detail = '';
   try {
     const j = JSON.parse(bodyText);
@@ -394,6 +489,7 @@ export function parseError(status, bodyText) {
   }
   detail = formatIssues(detail);
   if (detail.length > 800) detail = `${detail.slice(0, 800)}…`;
+  if (/refused to answer/i.test(detail)) ({ title, hint } = REFUSAL_TEXT);
   return { status, title, hint, detail };
 }
 
@@ -409,9 +505,11 @@ export function formatUsd(cost) {
 const shellQuote = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;
 
 // A copy-pasteable curl command. The key stays an environment variable so it
-// never ends up in the clipboard.
-export function buildCurl(endpoint, body) {
+// never ends up in the clipboard. Pass a body with images redacted for display;
+// `imagesOmitted` adds a note that the command needs the real image data to run.
+export function buildCurl(endpoint, body, imagesOmitted = false) {
   return [
+    ...(imagesOmitted ? ['# 注意：命令里的图片数据已省略，运行前需要换回完整的 base64 数据'] : []),
     `curl ${shellQuote(endpoint)} \\`,
     '  -H "Authorization: Bearer $OPENROUTER_API_KEY" \\',
     '  -H "Content-Type: application/json" \\',

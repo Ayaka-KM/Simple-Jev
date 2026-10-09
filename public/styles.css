@@ -250,6 +250,27 @@ h1 {
   flex-shrink: 0;
 }
 .icon-btn:hover { color: var(--ink-1); }
+a.icon-btn {
+  text-decoration: none;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Icons that always show (the theme icons switch by data-mode). */
+.icon-static {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 
 .icon {
   width: 18px;
@@ -439,6 +460,114 @@ textarea:focus-visible {
 }
 .hint.is-error {
   color: var(--danger-ink);
+}
+
+/* ---- images ---------------------------------------------------------------- */
+
+.field-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.field-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-1);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.image-count {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.image-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 8px;
+}
+.image-list:empty {
+  display: none;
+}
+.image-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  min-width: 0;
+}
+.image-item img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--track);
+}
+.image-meta {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.image-item .image-remove {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--surface);
+  font-size: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.image-item .image-remove:hover {
+  background: var(--surface);
+  color: var(--danger-ink);
+  border-color: var(--danger);
+}
+.image-list.is-unsent .image-item img {
+  opacity: 0.4;
+  filter: grayscale(1);
+}
+.image-add {
+  margin-top: 0;
+}
+.image-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+.image-detail-row label {
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.image-detail-row select {
+  width: auto;
+  min-width: 0;
+  flex: 1;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  font-size: 14px;
+}
+#image-field.is-disabled .image-add {
+  border-style: solid;
+}
+.card.is-dragover {
+  outline: 2px dashed var(--accent);
+  outline-offset: -6px;
+  background: var(--accent-soft);
 }
 
 .check {

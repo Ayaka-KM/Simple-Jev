@@ -40,6 +40,8 @@ function el(tag, className, text) {
 }
 
 const pctText = (n) => `${n}%`;
+// "Jev " / "GPT-6 Luna " for headlines; `res.by` is set by the caller from the model id.
+const who = (res) => (res?.by ? `${res.by} ` : '模型');
 
 // Identifies a set of options, to tell whether the bars on screen need rebuilding.
 export const signatureOf = (type, items) =>
@@ -320,7 +322,7 @@ export function createViz(root, tooltip) {
       seg.tabIndex = -1;
       return;
     }
-    const text = result?.estimated ? 'Jev 的选择' : pctText(it.pct);
+    const text = result?.estimated ? `${who(result)}的选择` : pctText(it.pct);
     seg.hidden = false;
     seg.style.left = geo.left ?? 'auto';
     seg.style.right = geo.right ?? 'auto';
@@ -377,12 +379,12 @@ export function createViz(root, tooltip) {
       res.confidence == null ? '' : `置信度 ${Math.round(res.confidence * 100)}%（${describeConfidence(res.confidence)}）`;
     if (res.type === 'noul') {
       const d = describeNoul(res.probability);
-      refs.headMain.textContent = `Jev 判断：${d.text}`;
+      refs.headMain.textContent = `${who(res)}判断：${d.text}`;
       refs.headSub.textContent = `“是”的概率为 ${res.items[0].pct}%`;
     } else if (res.type === 'choice') {
       const win = res.items.find((it) => it.key === res.winner);
-      refs.headMain.textContent = `Jev 的选择：${win ? win.label : res.winner}`;
-      const parts = res.estimated ? ['接口没有返回各选项的概率，条形图只标出 Jev 的选择'] : [`概率 ${win?.pct ?? 0}%`];
+      refs.headMain.textContent = `${who(res)}的选择：${win ? win.label : res.winner}`;
+      const parts = res.estimated ? [`接口没有返回各选项的概率，条形图只标出${who(res)}的选择`] : [`概率 ${win?.pct ?? 0}%`];
       if (confText) parts.push(confText);
       refs.headSub.textContent = parts.join(' · ');
     } else {
@@ -398,7 +400,7 @@ export function createViz(root, tooltip) {
     refs.rows?.forEach((r, i) => {
       const it = res?.items[i];
       let text = '';
-      if (it && res.type === 'choice' && it.key === res.winner) text = '✓ Jev 的选择';
+      if (it && res.type === 'choice' && it.key === res.winner) text = `✓ ${who(res)}的选择`;
       if (it && res.type === 'noul' && it.key === res.winner) text = '✓ 更可能';
       if (it && res.type === 'score' && it.key === res.peak) text = '最可能';
       r.badge.textContent = text;
@@ -429,11 +431,12 @@ export function createViz(root, tooltip) {
   }
 
   // Shrinks whatever is on screen back to 0 while a new call is in flight.
-  async function drain() {
+  // `name` is the short name of the model being called, e.g. "GPT-6 Luna".
+  async function drain(name = '模型') {
     anim?.cancel();
     setBadges(null);
     refs.segs?.forEach((seg) => (seg.tabIndex = -1));
-    refs.headMain.textContent = '正在等待 Jev 回答…';
+    refs.headMain.textContent = `正在等待 ${name} 回答…`;
     refs.headSub.textContent = '通常一秒内就会返回。';
     if (!result || level === 0) {
       root.classList.remove('has-result');
