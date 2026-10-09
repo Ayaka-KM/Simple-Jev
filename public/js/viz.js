@@ -40,7 +40,8 @@ function el(tag, className, text) {
 }
 
 const pctText = (n) => `${n}%`;
-// "Jev " / "GPT-6 Luna " for headlines; `res.by` is set by the caller from the model id.
+// "Jev " / "GPT-6 Luna " for headlines, or 模型 (no space) when the caller set no
+// short name; `res.by` comes from the model id.
 const who = (res) => (res?.by ? `${res.by} ` : '模型');
 
 // Identifies a set of options, to tell whether the bars on screen need rebuilding.
@@ -431,12 +432,12 @@ export function createViz(root, tooltip) {
   }
 
   // Shrinks whatever is on screen back to 0 while a new call is in flight.
-  // `name` is the short name of the model being called, e.g. "GPT-6 Luna".
-  async function drain(name = '模型') {
+  // `name` is the short name of the model being called, e.g. "GPT-6 Luna", or ''.
+  async function drain(name = '') {
     anim?.cancel();
     setBadges(null);
     refs.segs?.forEach((seg) => (seg.tabIndex = -1));
-    refs.headMain.textContent = `正在等待 ${name} 回答…`;
+    refs.headMain.textContent = name ? `正在等待 ${name} 回答…` : '正在等待模型回答…';
     refs.headSub.textContent = '通常一秒内就会返回。';
     if (!result || level === 0) {
       root.classList.remove('has-result');

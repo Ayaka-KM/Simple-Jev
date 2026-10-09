@@ -323,8 +323,11 @@ modelCustom.addEventListener('input', () => {
 });
 
 // Whether images can be sent depends on the model; names we don't know are looked up.
+// A message about adding images was about the previous model, so it goes.
 function onModelChanged() {
-  if (currentModel() && !MODELS.some((m) => m.id === currentModel())) loadCatalog();
+  const model = currentModel();
+  if (imageMessage && model !== imageMessageModel) imageMessage = '';
+  if (model && imageSupport(model, null).source !== 'builtin') loadCatalog();
   renderImageField();
 }
 
@@ -365,8 +368,8 @@ for (const radio of form.elements.type) {
 // right before the question input, so Shift+Tab from there reaches 撤销.
 const clearBtn = el('button', 'chip chip-clear', '清空');
 clearBtn.type = 'button';
-clearBtn.title = '清空问题、背景内容和所有选项';
-clearBtn.setAttribute('aria-label', '清空问题、背景内容和所有选项');
+clearBtn.title = '清空问题、背景内容、图片和所有选项';
+clearBtn.setAttribute('aria-label', '清空问题、背景内容、图片和所有选项');
 clearBtn.addEventListener('click', () => clearInputs());
 const clearNotice = el('span', 'inline-notice');
 clearNotice.setAttribute('role', 'status');
@@ -395,8 +398,8 @@ function dismissUndo() {
   if (hadFocus) clearBtn.focus();
 }
 
-// Empties the question, background and the options of every question type, back
-// to blank rows as on a first visit. Connection settings (Base URL, key, model)
+// Empties the question, background, images and the options of every question type,
+// back to blank rows as on a first visit. Connection settings (Base URL, key, model)
 // and the chosen type stay. 撤销 is offered until the next edit or 8 seconds.
 function clearInputs() {
   const blank = {
@@ -416,8 +419,13 @@ function clearInputs() {
       s.score.map((l) => l.text),
       s.images.map((img) => img.id),
     ]);
-  // Already blank (e.g. a double click): keep any pending undo of the real content.
+  // Already blank (e.g. a double click): keep any pending undo of the real content,
+  // but still drop images that are being prepared.
   if (content(state) === content(blank)) {
+    if (imagesPending > 0) {
+      resetImageQueue();
+      renderImageField();
+    }
     questionInput.focus();
     return;
   }
@@ -429,7 +437,7 @@ function clearInputs() {
     score: state.score.map((l) => ({ ...l })),
     images: state.images.slice(),
   };
-  imageMessage = '';
+  resetImageQueue();
   Object.assign(state, blank);
   renderAll();
   saveState();
@@ -438,6 +446,7 @@ function clearInputs() {
   const undo = el('button', 'link-btn', '撤销');
   undo.type = 'button';
   undo.addEventListener('click', () => {
+    resetImageQueue();
     Object.assign(state, before);
     renderAll();
     saveState();
@@ -455,8 +464,8 @@ form.addEventListener('input', dismissUndo);
 function loadExample(ex) {
   dismissUndo();
   // Examples are text only; images belong to the question they were added for.
+  resetImageQueue();
   state.images = [];
-  imageMessage = '';
   state.type = ex.type;
   state.question = ex.question;
   state.context = ex.context ?? '';
@@ -509,77 +518,144 @@ function currentImageSupport() {
 }
 
 let imageUid = 0;
-let imageMessage = ''; // problems from the last add, shown under the field until the next change
-const MAX_SIDE = 1024; // longest side sent; about 770 tokens per image with GPT-6 Luna
+// What went wrong with the last add, shown before the hint until the images or the model change.
+let imageMessage = '';
+let imageMessageModel = '';
+// Adds run one batch at a time, so the limit is checked against the images really added.
+let imageQueue = Promise.resolve();
+let imagesPending = 0; // files of the current list still being prepared
+// Bumped when the whole list is replaced (清空, 撤销, an example): images still being
+// prepared belong to the old list and are dropped.
+let imageGen = 0;
+let shownImages = null; // ids of the thumbnails on screen, so re-renders keep focus
+
+const MAX_SIDE = 1024; // longest side sent: at most about 1,000 tokens per image with GPT-6 Luna
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
-const KEEP_ORIGINAL_BYTES = 400 * 1024;
-const SENDABLE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 
-const formatKB = (bytes) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+// No-break space, so a caption never wraps between the number and the unit.
+const formatKB = (bytes) =>
+  bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
-function readAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
+function setImageMessage(text) {
+  imageMessage = text;
+  imageMessageModel = currentModel();
 }
 
-// Small PNG/JPEG/WebP files are sent as they are; anything larger or in another format
-// (HEIC, GIF, BMP… whatever the browser can decode) becomes a JPEG at most MAX_SIDE wide.
+// Screen-reader announcements for adds and removals; the hint itself is not live,
+// since it also changes while a custom model name is typed.
+const imageStatus = $('image-status');
+let announceTimer = null;
+function announce(text) {
+  clearTimeout(announceTimer);
+  imageStatus.textContent = '';
+  // Set after a beat, so the same text twice in a row is read twice.
+  announceTimer = setTimeout(() => (imageStatus.textContent = text), 60);
+}
+
+// Every image is redrawn onto a white canvas and sent as a JPEG at most MAX_SIDE wide:
+// transparent areas become white (the model would see them as black), metadata such as
+// the EXIF location is left behind, and any format the browser can decode (HEIC, GIF,
+// BMP…) works.
 async function prepareImage(file) {
-  if (file.size > MAX_FILE_BYTES) throw new Error('文件超过 20 MB');
+  if (file.size > MAX_FILE_BYTES) throw new Error('文件超过 20 MB');
   let bitmap;
   try {
     bitmap = await createImageBitmap(file);
   } catch {
     throw new Error('无法读取这张图片，请换成 PNG、JPEG 或 WebP');
   }
-  const { width, height } = bitmap;
-  const scale = Math.min(1, MAX_SIDE / Math.max(width, height));
-  let dataUrl;
-  let w = width;
-  let h = height;
-  if (scale === 1 && SENDABLE_TYPES.includes(file.type) && file.size <= KEEP_ORIGINAL_BYTES) {
-    dataUrl = await readAsDataUrl(file);
-  } else {
-    w = Math.max(1, Math.round(width * scale));
-    h = Math.max(1, Math.round(height * scale));
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff'; // JPEG has no transparency
-    ctx.fillRect(0, 0, w, h);
-    ctx.drawImage(bitmap, 0, 0, w, h);
-    dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-  }
+  const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+  const w = Math.max(1, Math.round(bitmap.width * scale));
+  const h = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(bitmap, 0, 0, w, h);
   bitmap.close?.();
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
   return { id: `img${++imageUid}`, name: file.name || '粘贴的图片', dataUrl, width: w, height: h, bytes: dataUrlBytes(dataUrl) };
 }
 
-async function addImages(fileList) {
-  const files = [...(fileList ?? [])].filter((f) => f.type.startsWith('image/'));
-  if (!files.length) return;
-  const support = currentImageSupport();
-  if (support.supported === false) {
-    imageMessage = `${currentModel()} 只支持文字，不能添加图片。`;
+// Files with no type (some drag sources) are tried too; the decoder decides.
+const mayBeImage = (file) => !file.type || file.type.startsWith('image/');
+
+function addImages(fileList) {
+  const files = [...(fileList ?? [])];
+  if (!files.length) return imageQueue;
+  if (currentImageSupport().supported === false) {
+    setImageMessage('没有添加图片');
     renderImageField();
-    return;
+    announce(`没有添加图片：${currentModel()} 只支持文字`);
+    return imageQueue;
   }
-  const room = support.max - state.images.length;
+  // Adding is an edit: 撤销 of an earlier 清空 must not overwrite it.
+  dismissUndo();
+  const gen = imageGen;
+  imagesPending += files.length;
+  renderImageField();
+  imageQueue = imageQueue.then(() => addBatch(files, gen));
+  return imageQueue;
+}
+
+async function addBatch(files, gen) {
   const problems = [];
-  if (files.length > room) problems.push(`每次最多 ${support.max} 张，多出的 ${files.length - Math.max(0, room)} 张没有添加`);
-  for (const file of files.slice(0, Math.max(0, room))) {
+  let added = 0;
+  let overLimit = 0;
+  let blocked = false;
+  for (const file of files) {
     try {
-      state.images.push(await prepareImage(file));
+      // The list was replaced, or the model stopped taking images, while this batch waited.
+      if (gen !== imageGen) continue;
+      if (currentImageSupport().supported === false) {
+        blocked = true;
+        continue;
+      }
+      if (!mayBeImage(file)) {
+        problems.push(`${file.name || '文件'}：不是图片`);
+        continue;
+      }
+      if (state.images.length >= currentImageSupport().max) {
+        overLimit += 1;
+        continue;
+      }
+      const img = await prepareImage(file);
+      // Check again: all of the above can change while the image is prepared.
+      if (gen !== imageGen) continue;
+      const support = currentImageSupport();
+      if (support.supported === false) blocked = true;
+      else if (state.images.length >= support.max) overLimit += 1;
+      else {
+        state.images.push(img);
+        added += 1;
+      }
     } catch (err) {
       problems.push(`${file.name || '图片'}：${err.message}`);
+    } finally {
+      if (gen === imageGen) {
+        imagesPending -= 1;
+        renderImageField();
+      }
     }
   }
-  imageMessage = problems.join('；');
-  onImagesEdited();
+  if (gen !== imageGen) return;
+  if (overLimit) problems.push(`最多 ${currentImageSupport().max} 张，有 ${overLimit} 张没有添加`);
+  if (blocked) problems.unshift('有图片没有添加');
+  setImageMessage(problems.join('；'));
+  if (added) onImagesEdited();
+  else renderImageField();
+  const done = added ? `已添加 ${added} 张图片，共 ${state.images.length} 张` : '没有添加图片';
+  announce(problems.length ? `${done}。${problems.join('；')}` : done);
+}
+
+// Replaces the whole list (清空, 撤销, an example): drops images still being prepared.
+function resetImageQueue() {
+  imageGen += 1;
+  imagesPending = 0;
+  imageMessage = '';
 }
 
 function removeImage(id) {
@@ -588,7 +664,9 @@ function removeImage(id) {
   state.images.splice(i, 1);
   imageMessage = '';
   onImagesEdited();
-  // Keep keyboard focus nearby after the list re-renders.
+  announce(`已删除图片 ${i + 1}，还剩 ${state.images.length} 张`);
+  // Keep keyboard focus nearby after the list re-renders; 添加图片 stays focusable
+  // even when it is unavailable (aria-disabled).
   const next = imageList.children[Math.min(i, state.images.length - 1)];
   (next?.querySelector('button') ?? imageAdd).focus();
 }
@@ -600,24 +678,17 @@ function onImagesEdited() {
   markStale();
 }
 
-function renderImageField() {
-  const support = currentImageSupport();
-  const n = state.images.length;
-  const blocked = support.supported === false;
-  imageField.classList.toggle('is-disabled', blocked);
-  imageList.classList.toggle('is-unsent', blocked && n > 0);
-  imageAdd.disabled = blocked || n >= support.max;
-  imageAdd.textContent = !blocked && n >= support.max ? `最多 ${support.max} 张` : '＋ 添加图片';
-  imageCount.textContent = n ? `${n} / ${blocked ? 0 : support.max} 张` : '';
-  imageDetailRow.hidden = n === 0 || blocked;
-
+function renderThumbnails() {
+  const ids = state.images.map((img) => img.id).join();
+  if (ids === shownImages) return;
+  shownImages = ids;
   imageList.replaceChildren(
     ...state.images.map((img, i) => {
       const li = el('li', 'image-item');
       const pic = el('img');
       pic.src = img.dataUrl;
       pic.alt = `图片 ${i + 1}：${img.name}`;
-      const meta = el('span', 'image-meta', `${img.width}×${img.height} · ${formatKB(img.bytes)}`);
+      const meta = el('span', 'image-meta', `${img.width}×${img.height} · ${formatKB(img.bytes)}`);
       const remove = el('button', 'mini-btn image-remove', '×');
       remove.type = 'button';
       remove.setAttribute('aria-label', `删除图片 ${i + 1}`);
@@ -627,6 +698,25 @@ function renderImageField() {
       return li;
     }),
   );
+}
+
+function renderImageField() {
+  const support = currentImageSupport();
+  const n = state.images.length;
+  const blocked = support.supported === false;
+  const full = n >= support.max;
+  imageField.classList.toggle('is-disabled', blocked);
+  imageList.classList.toggle('is-unsent', blocked && n > 0);
+  // aria-disabled rather than disabled, so the button keeps keyboard focus when the
+  // last free slot fills up.
+  imageAdd.setAttribute('aria-disabled', String(blocked || full));
+  imageAdd.textContent = !blocked && full ? `最多 ${support.max} 张` : '＋ 添加图片';
+  const counts = [];
+  if (n) counts.push(`${n} / ${blocked ? 0 : support.max} 张`);
+  if (imagesPending > 0) counts.push(`正在处理 ${imagesPending} 张…`);
+  imageCount.textContent = counts.join(' · ');
+  imageDetailRow.hidden = n === 0 || blocked;
+  renderThumbnails();
 
   const model = currentModel() || '这个模型';
   let text;
@@ -638,15 +728,18 @@ function renderImageField() {
   } else if (support.supported === null) {
     text = `无法确认「${model}」是否支持图片。不支持图片的模型通常不会报错，而是给出没有根据的结果。`;
   } else {
-    text = `点「添加图片」、把图片拖到这里，或直接粘贴（Ctrl+V）。图片会在浏览器里压缩后发送，最多 ${support.max} 张；不会保存，刷新页面后需要重新添加。`;
+    text = `点「添加图片」、把图片拖到这里，或直接粘贴（Ctrl+V）。图片会在浏览器里缩小到 ${MAX_SIDE} 像素以内、转成 JPEG 再发送，最多 ${support.max} 张；不会保存，刷新页面后需要重新添加。`;
   }
   imageHint.textContent = imageMessage ? `${imageMessage}。${text}` : text;
   imageHint.classList.toggle('is-error', Boolean(imageMessage));
 }
 
-imageAdd.addEventListener('click', () => imageInput.click());
-imageInput.addEventListener('change', async () => {
-  await addImages(imageInput.files);
+imageAdd.addEventListener('click', () => {
+  if (imageAdd.getAttribute('aria-disabled') === 'true') return;
+  imageInput.click();
+});
+imageInput.addEventListener('change', () => {
+  addImages(imageInput.files);
   imageInput.value = ''; // allow picking the same file again
 });
 
@@ -680,10 +773,18 @@ dropZone.addEventListener('drop', (e) => {
   addImages(e.dataTransfer.files);
 });
 
-// Pasting an image anywhere adds it (text pastes are left alone).
+const TEXT_INPUTS = new Set(['text', 'url', 'password', 'search', 'email', 'tel', 'number']);
+const takesText = (node) =>
+  node instanceof HTMLElement &&
+  (node.isContentEditable || node instanceof HTMLTextAreaElement || (node instanceof HTMLInputElement && TEXT_INPUTS.has(node.type)));
+
+// Pasting files adds them. A paste into a text field that also carries text is left
+// to the field: spreadsheets, for one, copy cells as text plus a picture of them.
 document.addEventListener('paste', (e) => {
-  const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
+  const data = e.clipboardData;
+  const files = [...(data?.files ?? [])];
   if (!files.length) return;
+  if (takesText(e.target) && data.getData('text/plain').trim()) return;
   e.preventDefault();
   addImages(files);
 });
@@ -954,7 +1055,7 @@ function showMeta(json, ms, stateSource, imageCount = 0, detail = 'auto') {
     [
       '判断材料',
       ({ question: '问题本身（背景内容为空）', text: '背景内容（文本）', json: '背景内容（JSON）' }[stateSource] ?? '—') +
-        (imageCount ? ` + ${imageCount} 张图片（精度：${{ auto: '自动', low: '低', high: '高' }[detail] ?? '自动'}）` : ''),
+        (imageCount ? ` + ${imageCount} 张图片（精度：${detail === 'low' ? '低' : '自动'}）` : ''),
     ],
     ['模型', json?.model ?? '—', 'wide mono'],
     ['生成 ID', json?.id ?? '—', 'wide mono'],
@@ -1026,7 +1127,8 @@ const FIELD_INPUT = {
   apiKey: () => keyInput,
   model: () => (modelSelect.value === CUSTOM_MODEL ? modelCustom : modelSelect),
   question: () => questionInput,
-  images: () => imageAdd.disabled ? imageList.querySelector('button') ?? imageAdd : imageAdd,
+  // Too many images, or images the model can't take: the way out is deleting some.
+  images: () => (imageAdd.getAttribute('aria-disabled') === 'true' ? imageList.querySelector('button') ?? imageAdd : imageAdd),
   // Marks the rows the error names (duplicates, unnamed or blank rows) and returns the first.
   options: (err) => {
     const list = state.type === 'choice' ? choiceList : scoreList;

@@ -491,6 +491,11 @@ describe('imageSupport', () => {
     assert.equal(imageSupport('liquid/d1-20260930', catalog).supported, false);
     assert.equal(imageSupport('inception/mercury-decide:free', catalog).supported, false);
   });
+  it('ignores a routing variant such as :nitro', () => {
+    assert.equal(imageSupport('openai/gpt-6-luna-decisions:nitro', null).supported, true);
+    assert.equal(imageSupport('typesafe/jev-1.13:floor', null).supported, false);
+    assert.deepEqual(imageSupport('cloudflare/clef:floor', catalog), { supported: true, max: 4, source: 'catalog' });
+  });
   it('says "unknown" when the catalog has no entry', () => {
     assert.equal(imageSupport('someone/new-model', catalog).supported, null);
     assert.equal(imageSupport('someone/new-model', null).supported, null);
@@ -517,6 +522,10 @@ describe('buildState / buildRequest with images', () => {
     const j = buildRequest(form({ context: '{"title":"红房子"}', images: [{ dataUrl: PNG }], imageDetail: 'auto' }));
     assert.deepEqual(j.body.state[0], { title: '红房子' });
     assert.deepEqual(j.body.state[1], { type: 'image_url', image_url: { url: PNG } });
+  });
+  it('sends no detail for a value the page does not offer', () => {
+    const h = buildRequest(form({ images: [{ dataUrl: PNG }], imageDetail: 'high' }));
+    assert.deepEqual(h.body.state[1], { type: 'image_url', image_url: { url: PNG } });
   });
   it('leaves state unchanged without images', () => {
     assert.equal(buildRequest(form({ images: [] })).body.state, baseForm.question);
@@ -572,6 +581,6 @@ describe('modelShortName', () => {
   it('names the model in headlines', () => {
     assert.equal(modelShortName('typesafe/jev-1.13-20260917'), 'Jev');
     assert.equal(modelShortName('openai/gpt-6-luna-decisions-20261006'), 'GPT-6 Luna');
-    assert.equal(modelShortName('cloudflare/clef'), '模型');
+    assert.equal(modelShortName('cloudflare/clef'), '');
   });
 });

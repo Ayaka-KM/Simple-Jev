@@ -123,14 +123,17 @@
               <button type="button" class="add-btn image-add" id="image-add" aria-describedby="image-hint">＋ 添加图片</button>
               <input type="file" id="image-input" accept="image/png,image/jpeg,image/webp,image/*" multiple hidden>
             </div>
-            <p class="hint" id="image-hint" aria-live="polite"></p>
-            <div class="image-detail-row" id="image-detail-row">
-              <label for="image-detail">图片精度</label>
-              <select id="image-detail">
-                <option value="auto">自动（默认）</option>
-                <option value="low">低：更便宜，每张约 200 token</option>
-                <option value="high">高：看清更多细节</option>
-              </select>
+            <p class="hint" id="image-hint"></p>
+            <p class="visually-hidden" id="image-status" role="status"></p>
+            <div id="image-detail-row">
+              <div class="image-detail-row">
+                <label for="image-detail">图片精度</label>
+                <select id="image-detail" aria-describedby="image-detail-hint">
+                  <option value="auto">自动：看清细节</option>
+                  <option value="low">低：只看大概，更省钱</option>
+                </select>
+              </div>
+              <p class="hint" id="image-detail-hint">自动：每张最多约 1000 token（约 $0.0001）。低：先缩小到 512 像素以内再看，每张最多约 260 token，小字可能看不清。</p>
             </div>
           </div>
         </section>
@@ -179,7 +182,7 @@
       <aside class="card about">
         <h2 class="card-title">关于决策模型</h2>
         <p>Jev 和 GPT-6 Luna Decisions 都是<strong>决策模型</strong>：它们不写文字、不解释理由，只在你给定的选项之间分配概率。答案好不好，很大程度取决于选项怎么写。只有 GPT-6 Luna Decisions 能看图片。</p>
-        <p class="hint">都只按输入 token 计费，输出免费；一次调用通常不到 $0.0001。两者的详细区别见<a href="/compare.html">模型对比</a>，也可以看 <a href="https://openrouter.ai/docs/guides/community/jev" target="_blank" rel="noopener noreferrer">Jev 文档</a>和 <a href="https://openrouter.ai/docs/guides/community/multimodal-decisions" target="_blank" rel="noopener noreferrer">图片输入文档</a>。</p>
+        <p class="hint">都只按输入 token 计费，输出免费；一次纯文字调用通常不到 $0.0001，每张图片另加最多约 $0.0001。两者的详细区别见<a href="/compare.html">模型对比</a>，也可以看 <a href="https://openrouter.ai/docs/guides/community/jev" target="_blank" rel="noopener noreferrer">Jev 文档</a>和 <a href="https://openrouter.ai/docs/guides/community/multimodal-decisions" target="_blank" rel="noopener noreferrer">图片输入文档</a>。</p>
       </aside>
     </div>
 

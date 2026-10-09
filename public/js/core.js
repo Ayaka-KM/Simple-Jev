@@ -18,20 +18,26 @@ export const UI_MAX_IMAGES = 8;
 // Image limits OpenRouter documents for image-capable models outside MODELS.
 const KNOWN_IMAGE_LIMITS = { 'cloudflare/clef': 4, 'cloudflare/clef-flash': 4 };
 const DEFAULT_IMAGE_LIMIT = 4;
-export const IMAGE_DETAILS = ['auto', 'low', 'high'];
+// No "high": the page shrinks every image to at most 1024 px, and at that size
+// high detail reads (and bills) exactly like auto.
+export const IMAGE_DETAILS = ['auto', 'low'];
 const IMAGE_DATA_URL = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
+
+// A model id without its routing variant: "openai/gpt-6-luna-decisions:nitro" → "openai/gpt-6-luna-decisions".
+const withoutVariant = (id) => id.replace(/:[^/]*$/, '');
 
 // Whether `modelId` takes images, and how many this page will send.
 // `catalog` is OpenRouter's model list (GET /api/v1/models), or null if unavailable.
 // supported: true / false, or null when the model is unknown (custom name, no catalog).
 export function imageSupport(modelId, catalog) {
   const id = String(modelId ?? '').trim();
-  const known = MODELS.find((m) => m.id === id);
+  const known = MODELS.find((m) => m.id === id) ?? MODELS.find((m) => m.id === withoutVariant(id));
   if (known) return { supported: known.images > 0, max: Math.min(UI_MAX_IMAGES, known.images), source: 'builtin' };
-  const entry = (catalog ?? []).find((m) => m?.id === id || m?.canonical_slug === id);
+  const find = (key) => (catalog ?? []).find((m) => m?.id === key || m?.canonical_slug === key);
+  const entry = find(id) ?? find(withoutVariant(id));
   if (!entry) return { supported: null, max: Math.min(UI_MAX_IMAGES, DEFAULT_IMAGE_LIMIT), source: 'unknown' };
   const supported = Boolean(entry.architecture?.input_modalities?.includes('image'));
-  const base = String(entry.id).replace(/:[^/]*$/, '');
+  const base = withoutVariant(String(entry.id));
   const limit = MODELS.find((m) => m.id === base)?.images || KNOWN_IMAGE_LIMITS[base] || DEFAULT_IMAGE_LIMIT;
   return { supported, max: supported ? Math.min(UI_MAX_IMAGES, limit) : 0, source: 'catalog' };
 }
@@ -118,7 +124,7 @@ export function buildState(context, question, images = [], detail = 'auto') {
   if (!images.length) return base;
   const parts = images.map((img) => ({
     type: 'image_url',
-    image_url: detail === 'low' || detail === 'high' ? { url: img.dataUrl, detail } : { url: img.dataUrl },
+    image_url: detail !== 'auto' && IMAGE_DETAILS.includes(detail) ? { url: img.dataUrl, detail } : { url: img.dataUrl },
   }));
   return { state: [base.state, ...parts], source: base.source };
 }
@@ -411,12 +417,13 @@ export function isAnswerShapeError(err) {
   return err instanceof AnswerShapeError;
 }
 
-// A short name for headlines such as "Jev 的选择", from a model id.
+// A short name for headlines such as "Jev 的选择", from a model id; '' for other
+// models, which the headlines then call 模型.
 export function modelShortName(id) {
   const s = String(id ?? '').toLowerCase();
   if (s.includes('jev')) return 'Jev';
   if (s.includes('gpt-6-luna')) return 'GPT-6 Luna';
-  return '模型';
+  return '';
 }
 
 // Plain-language reading of a yes/no probability.

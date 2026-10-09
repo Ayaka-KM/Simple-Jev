@@ -88,7 +88,7 @@
             <ul class="cmp-list">
               <li><strong>需要看图片。</strong>Luna 能读图，每次最多 128 张；Jev 不支持图片。</li>
               <li><strong>输入很长。</strong>超过 Jev 32,000 token 的单次输入上限时，可以用上下文 1,050,000 token 的 Luna。</li>
-              <li><strong>需要 OpenAI 的合规选项。</strong>零数据保留（ZDR）、HIPAA、欧洲（EEA + 瑞士）数据驻留，限直连 OpenAI 的合格客户。</li>
+              <li><strong>需要 OpenAI 的合规选项。</strong>零数据保留（ZDR）、HIPAA、数据驻留（在美国或欧洲处理请求），限直连 OpenAI 的合格客户。</li>
             </ul>
           </article>
           <article class="cmp-pick-card is-jev" aria-labelledby="pick-jev-h">
@@ -295,7 +295,7 @@
         <ul class="cmp-list">
           <li>放在 <code>state</code> <strong>数组的最外层</strong>，写成 <code>{ "type": "image_url", "image_url": { "url": "data:image/png;base64,..." } }</code>；数组里的文字直接写字符串。</li>
           <li>只接受 base64 data URL，类型为 <code>image/png</code>、<code>image/jpeg</code>、<code>image/webp</code>；<strong>不会下载远程网址</strong>。</li>
-          <li>可以设置 <code>detail</code>（<code>auto</code> / <code>low</code> / <code>high</code>）。</li>
+          <li>可以设置 <code>detail</code>（<code>auto</code> / <code>low</code> / <code>high</code>），它决定图片按多大尺寸计 token，见<a href="#img-tok-h">第 6 节的实测表</a>。</li>
           <li>每次最多 128 张图。</li>
           <li>嵌在对象里的图片不会被当成图片读取。</li>
         </ul>
@@ -454,7 +454,7 @@
         </ul>
 
         <h3 class="cmp-h3" id="img-tok-h">Luna 每张图片多算多少 token（实测）</h3>
-        <p>同一道单选题，不带图时 114 token。下表是加一张 JPEG 图后多出来的 token，按 <code>detail</code> 设置分列（Jev 不支持图片，所以只有 Luna）：</p>
+        <p>在同一个请求里加一张 JPEG 图，输入 token 会多出下表的数量（和题目内容无关），按 <code>detail</code> 设置分列。Jev 不支持图片，所以只有 Luna：</p>
         <div class="cmp-table-wrap">
           <div class="cmp-scroll" data-label="图片 token 表">
             <table class="cmp-table is-stack is-trio" aria-labelledby="img-tok-h">
@@ -474,10 +474,34 @@
                   <td class="num">+193</td>
                 </tr>
                 <tr>
-                  <th scope="row" class="cmp-nowrap">1024×768</th>
+                  <th scope="row" class="cmp-nowrap">768×1024（竖图）</th>
+                  <td class="num">+769</td>
+                  <td class="num">+769</td>
+                  <td class="num">+193</td>
+                </tr>
+                <tr>
+                  <th scope="row" class="cmp-nowrap">1024×256（长条）</th>
+                  <td class="num">+257</td>
+                  <td class="num">+257</td>
+                  <td class="num">+65</td>
+                </tr>
+                <tr>
+                  <th scope="row" class="cmp-nowrap">1024×576（16:9）</th>
+                  <td class="num">+577</td>
+                  <td class="num">+577</td>
+                  <td class="num">+145</td>
+                </tr>
+                <tr>
+                  <th scope="row" class="cmp-nowrap">1024×768（4:3）</th>
                   <td class="num">+769<span class="cmp-sub">约 $0.000077</span></td>
                   <td class="num">+769</td>
                   <td class="num">+193</td>
+                </tr>
+                <tr>
+                  <th scope="row" class="cmp-nowrap">1024×1024（正方形）</th>
+                  <td class="num">+1,025<span class="cmp-sub">约 $0.0001</span></td>
+                  <td class="num">+1,025</td>
+                  <td class="num">+257</td>
                 </tr>
                 <tr>
                   <th scope="row" class="cmp-nowrap">2048×1536</th>
@@ -489,8 +513,13 @@
             </table>
           </div>
         </div>
-        <p>所有组合都答对了（房子是红色）。<code>detail=low</code> 时每张图固定约 193 token（约 $0.000019）。</p>
-        <p class="cmp-cite">来源：<a href="#src-catalog">OpenRouter 模型目录</a>、<a href="#src-openai-guide">OpenAI Decisions 指南</a>、<a href="#src-reference">OpenRouter API 参考</a>、<a href="#test-a">实测 A</a>、<a href="#test-c">C</a>、<a href="#test-d">D</a>、<a href="#test-e">E</a></p>
+        <ul class="cmp-list">
+          <li><strong>规律：</strong>图片被切成 32×32 像素的小块，每块 1 token，每张再加 1。比如 1024×768 是 32×24 = 768 块，计 769 token。切块和缩放的方式和 OpenAI 视觉指南写的一致；指南里的普通视觉模型还要再乘 1.2 等系数，Luna Decisions 实测没有。</li>
+          <li><code>auto</code> 按原尺寸算；<code>low</code> 先把图缩到 512×512 以内再算，所以每张最多 257 token（正方形图），图越扁越少，不是固定值；<code>high</code> 最多算 2,500 块，所以特别大的图用 <code>high</code> 反而比 <code>auto</code> 便宜。</li>
+          <li>1024 像素以内的图，<code>high</code> 和 <code>auto</code> 完全一样。</li>
+          <li>实测 E 的几组照片在各种 <code>detail</code> 下都答对了（房子是红色）。</li>
+        </ul>
+        <p class="cmp-cite">来源：<a href="#src-catalog">OpenRouter 模型目录</a>、<a href="#src-openai-guide">OpenAI Decisions 指南</a>、<a href="#src-reference">OpenRouter API 参考</a>、<a href="#test-a">实测 A</a>、<a href="#test-c">C</a>、<a href="#test-d">D</a>、<a href="#test-e">E</a>、<a href="#test-f">F</a>、<a href="#src-openai-vision">OpenAI 视觉指南</a></p>
       </section>
 
       <!-- 7 ------------------------------------------------------------------ -->
@@ -645,7 +674,7 @@
           <li>不用于训练；滥用监控日志最多保留 30 天。</li>
           <li>符合条件的客户可以用零数据保留（ZDR）；签署 BAA 后可用于 HIPAA 场景。</li>
           <li>上传的图片会做 CSAM（儿童性虐待内容）扫描。</li>
-          <li>数据驻留和区域处理支持美国、欧洲（EEA + 瑞士）。</li>
+          <li>数据驻留：请求数据可以存放在美国、欧洲（EEA + 瑞士）、英国、日本、韩国、新加坡、印度、澳大利亚、加拿大、阿联酋，但<strong>在当地处理请求（区域处理）只支持美国和欧洲</strong>。美国以外的地区要先通过 OpenAI 的审批，数据驻留端点另加 10% 费用。</li>
         </ul>
         <p>通过 OpenRouter 调用时，还要同时适用 OpenRouter 自己的数据政策。</p>
         <p class="cmp-cite">来源：<a href="#src-catalog">OpenRouter 模型目录</a>、<a href="#src-openai-guide">OpenAI Decisions 指南</a>、<a href="#src-openai-data">OpenAI 数据控制文档</a>、<a href="#test-e">实测 E</a></p>
@@ -784,9 +813,9 @@
         <p>为了接入 Luna，调用工具里新增了这些功能：</p>
         <ol class="cmp-steps">
           <li><strong>选模型。</strong>模型下拉框里新增“GPT-6 Luna Decisions（OpenAI，支持图片）”。</li>
-          <li><strong>加图片。</strong>背景内容下方可以点击选择、拖拽或粘贴图片。图片会在浏览器里压缩成最长边 1024 像素的 JPEG；每次最多 8 张（网页自己的限制，低于 Luna 的 128 张）。图片只在内存里，不保存到浏览器，点「清空」时一起清掉。</li>
+          <li><strong>加图片。</strong>背景内容下方可以点击选择、拖拽或粘贴图片。每张图都会在浏览器里重新画成最长边不超过 1024 像素的 JPEG：透明的部分填成白色（否则模型会把它看成黑色），照片里的 EXIF 信息（比如拍摄地点）也不会发出去。每次最多 8 张（网页自己的限制，低于 Luna 的 128 张）。图片只在内存里，不保存到浏览器，点「清空」时一起清掉。</li>
           <li><strong>只有支持图片的模型才能上传。</strong>选 Jev 这类纯文字模型时，图片区域会禁用并说明原因（Jev 收到图片会乱猜而不报错）。填自定义模型名称时，会去 OpenRouter 模型目录查它是否支持图片。</li>
-          <li><strong>选图片精度。</strong>可选自动 / 低 / 高；选“低”每张约 193 token。</li>
+          <li><strong>选图片精度。</strong>可选“自动”或“低”：自动每张最多约 1,000 token；低先缩到 512 像素以内，每张最多约 260 token。网页发出的图不超过 1024 像素，这时“高”和“自动”完全一样，所以没有提供“高”。</li>
           <li><strong>查看原始请求。</strong>原始请求和 curl 命令里的图片 base64 会截断显示。</li>
           <li><strong>拒答提示。</strong>Luna 拒答时（HTTP 502 + “refused to answer”），会显示“模型拒绝回答这道题”，并说明重试没用、需要换个问法。</li>
         </ol>
@@ -819,6 +848,10 @@
             <dt>实测 E</dt>
             <dd>512×384 / 1024×768 / 2048×1536 的 JPEG，配合 <code>detail</code> 的 auto / low / high；JSON 对象 + 图片；远程网址；129 张图；拒答探测。</dd>
           </div>
+          <div id="test-f">
+            <dt>实测 F</dt>
+            <dd>1024×1024、1024×576、768×1024、1024×256 的 JPEG 和实测 E 的三张照片，各配 <code>detail</code> 的 auto / low / high，和不带图的同一请求相减，得出每张图的 token。</dd>
+          </div>
         </dl>
         <p class="cmp-note">延迟、可用率和请求量是 OpenRouter 在 2026-10-09 查询时的统计，会随时间变化。回答风格只是一组题的结果，不能说明谁更准。</p>
       </section>
@@ -844,11 +877,15 @@
             <a href="https://developers.openai.com/api/docs/guides/decisions" target="_blank" rel="noopener noreferrer">https://developers.openai.com/api/docs/guides/decisions</a>
           </li>
           <li id="src-openai-data">
-            <p class="cmp-src-name">OpenAI 数据控制文档（“Storage requirements and retention controls per endpoint”一节）</p>
-            <a href="https://developers.openai.com/api/llms-full.txt" target="_blank" rel="noopener noreferrer">https://developers.openai.com/api/llms-full.txt</a>
+            <p class="cmp-src-name">OpenAI 数据控制文档（“Data residency controls”和“Storage requirements and retention controls per endpoint”两节）</p>
+            <a href="https://developers.openai.com/api/docs/guides/your-data" target="_blank" rel="noopener noreferrer">https://developers.openai.com/api/docs/guides/your-data</a>
+          </li>
+          <li id="src-openai-vision">
+            <p class="cmp-src-name">OpenAI 图片与视觉指南（“Model sizing behavior”和“Patch-based image tokenization”两节）</p>
+            <a href="https://developers.openai.com/api/docs/guides/images-vision" target="_blank" rel="noopener noreferrer">https://developers.openai.com/api/docs/guides/images-vision</a>
           </li>
           <li id="src-tests">
-            <p class="cmp-src-name">我们的实测（实测 A–E，方法见<a href="#method">第 12 节</a>）</p>
+            <p class="cmp-src-name">我们的实测（实测 A–F，方法见<a href="#method">第 12 节</a>）</p>
             <code>POST https://openrouter.ai/api/alpha/decisions</code>
           </li>
         </ol>

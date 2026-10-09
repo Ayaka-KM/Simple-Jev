@@ -449,6 +449,8 @@ textarea:focus-visible {
   font-size: 13px;
   color: var(--ink-3);
   line-height: 1.55;
+  /* Long file names in image messages must not push the page sideways. */
+  overflow-wrap: anywhere;
 }
 .hint code {
   font-size: 12.5px;
@@ -488,7 +490,7 @@ textarea:focus-visible {
   margin: 0 0 8px;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
   gap: 8px;
 }
 .image-list:empty {
@@ -553,6 +555,9 @@ textarea:focus-visible {
   font-weight: 500;
   color: var(--ink-2);
 }
+#image-detail-hint {
+  margin-top: 6px;
+}
 .image-detail-row select {
   width: auto;
   min-width: 0;
@@ -601,7 +606,7 @@ textarea:focus-visible {
   padding: 0 14px;
 }
 .ghost-btn:hover,
-.add-btn:hover,
+.add-btn:hover:not(:disabled):not([aria-disabled="true"]),
 .copy-btn:hover,
 .chip:hover,
 .mini-btn:hover:not(:disabled) {
@@ -769,7 +774,8 @@ textarea:focus-visible {
   border-style: dashed;
   font-size: 14px;
 }
-.add-btn:disabled {
+.add-btn:disabled,
+.add-btn[aria-disabled="true"] {
   opacity: 0.45;
   cursor: not-allowed;
 }
