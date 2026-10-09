@@ -19,6 +19,31 @@ for (const chart of document.querySelectorAll('[data-bars]')) {
   });
 }
 
+// ---- comparison tables: give every cell its column name, for the stacked phone layout ----
+
+for (const table of document.querySelectorAll('.cmp-table.is-stack')) {
+  const heads = [...table.querySelectorAll('thead th')];
+  for (const row of table.querySelectorAll('tbody tr')) {
+    let column = 0;
+    for (const cell of row.children) {
+      const head = heads[column];
+      column += cell.colSpan;
+      if (cell.tagName !== 'TD' || cell.colSpan > 1 || !head) continue;
+      const dot = head.querySelector('.cmp-dot');
+      if (dot?.classList.contains('is-luna')) {
+        cell.dataset.col = 'Luna';
+        cell.classList.add('is-luna');
+      } else if (dot?.classList.contains('is-jev')) {
+        cell.dataset.col = 'Jev';
+        cell.classList.add('is-jev');
+      } else {
+        cell.dataset.col = head.dataset.short || head.textContent.trim();
+      }
+    }
+  }
+  table.dataset.labeled = '';
+}
+
 // ---- tables: keyboard-scrollable when wider than the card, with edge fades ----
 
 const SCROLL_HINT = '左右滑动查看完整表格';

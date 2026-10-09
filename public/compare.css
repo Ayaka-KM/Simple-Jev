@@ -346,6 +346,19 @@
   border: 1px solid var(--hairline);
   color: var(--ink-1);
   overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+/* Error messages quoted from the API: their own line, so they never break mid-sentence. */
+.cmp-section code.cmp-msg {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  line-height: 1.5;
+  color: var(--ink-2);
 }
 
 .cmp-code {
@@ -394,6 +407,7 @@
   font-size: 17px;
   line-height: 1.7;
   font-weight: 500;
+  text-wrap: pretty;
 }
 
 .cmp-pick {
@@ -564,7 +578,18 @@
   min-width: 540px;
 }
 .cmp-table.is-models {
-  min-width: 720px;
+  min-width: 760px;
+}
+/* Luna | Jev tables: the two model columns always get the same width. */
+.cmp-table.is-pair thead th:first-child { width: 26%; }
+.cmp-table.is-pair thead th:nth-child(2),
+.cmp-table.is-pair thead th:nth-child(3) { width: 37%; }
+.cmp-table.is-pair.is-numeric thead th:first-child { width: 40%; }
+.cmp-table.is-pair.is-numeric thead th:nth-child(2),
+.cmp-table.is-pair.is-numeric thead th:nth-child(3) { width: 30%; }
+.cmp-table.is-models tbody th code {
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 .cmp-table th,
 .cmp-table td {
@@ -587,9 +612,6 @@
   color: var(--ink-1);
   min-width: 7.5em;
 }
-.cmp-table.is-text tbody th {
-  width: 9.5em;
-}
 .cmp-table td {
   color: var(--ink-1);
 }
@@ -610,6 +632,7 @@
 }
 .cmp-table thead .cmp-sub {
   margin-top: 0;
+  white-space: nowrap;
 }
 .cmp-table thead .cmp-dot {
   margin-right: 6px;
@@ -617,8 +640,12 @@
 .cmp-table code {
   font-size: 12.5px;
 }
-.cmp-table thead code {
-  font-weight: 500;
+.cmp-section .cmp-table thead code {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 12.5px;
+  font-weight: 600;
   color: var(--ink-2);
 }
 .cmp-table tr.is-highlight > * {
@@ -628,6 +655,40 @@
   color: var(--ink-3);
 }
 .cmp-nowrap {
+  white-space: nowrap;
+}
+/* Model IDs break only after the "/" (marked with <wbr>), so a versioned ID never
+   reads as two IDs. Phones, where table cells are narrow, relax this (see below). */
+.cmp-section code.cmp-id {
+  overflow-wrap: normal;
+}
+.cmp-section code.cmp-id > span {
+  white-space: nowrap;
+}
+/* Wide enough for the whole ID: keep it on one line. */
+@media (min-width: 900px) {
+  .cmp-section code.cmp-id {
+    white-space: nowrap;
+  }
+  .cmp-section code.cmp-id wbr {
+    display: none;
+  }
+}
+/* Narrow screens: table cells are too small for a whole ID, so let it wrap anywhere. */
+@media (max-width: 720px) {
+  .cmp-section code.cmp-id,
+  .cmp-section code.cmp-id > span {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+/* Words for screen readers only, e.g. "无" beside a dash that they skip. */
+.cmp-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
   white-space: nowrap;
 }
 
@@ -805,6 +866,13 @@
 .cmp-type code {
   background: var(--surface);
 }
+.cmp-section .cmp-type-ret code {
+  display: block;
+  margin-top: 4px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  line-height: 1.55;
+}
 
 /* ---- 10: fact check ------------------------------------------------------ */
 
@@ -895,7 +963,7 @@
   max-width: 100%;
   padding: 3px 10px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 14px;
   background: var(--surface-2);
   font-size: 13px;
   line-height: 1.5;
@@ -1082,11 +1150,97 @@
   }
   .cmp-table th,
   .cmp-table td {
-    padding: 9px 11px;
+    padding: 9px 10px;
   }
-  .cmp-table.is-text tbody th {
-    width: 6.5em;
-    min-width: 6.5em;
+  .cmp-table tbody th {
+    min-width: 0;
+  }
+  .cmp-table td.num {
+    white-space: normal;
+  }
+  /* Comparison tables restack on phones: the row name on its own line, then the
+     values side by side underneath, so nothing has to scroll sideways. */
+  .cmp-table.is-stack,
+  .cmp-table.is-stack > thead,
+  .cmp-table.is-stack > tbody {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+  .cmp-table.is-stack tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cmp-table.is-stack.is-trio tr {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .cmp-table.is-stack thead th,
+  .cmp-table.is-pair.is-numeric thead th {
+    width: auto;
+    white-space: normal;
+  }
+  .cmp-table.is-stack thead th:first-child {
+    display: none;
+  }
+  .cmp-table.is-stack tbody th {
+    grid-column: 1 / -1;
+    padding-bottom: 0;
+  }
+  .cmp-table.is-stack tbody td {
+    border-top: 0;
+    padding-top: 6px;
+  }
+  /* Once compare.js has labeled every cell, each one carries its own column name. */
+  .cmp-table.is-stack[data-labeled] > thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .cmp-table.is-stack td[data-col]::before {
+    content: attr(data-col);
+    display: block;
+    width: fit-content;
+    margin-bottom: 1px;
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1.6;
+    color: var(--ink-3);
+  }
+  .cmp-table.is-stack td.is-luna[data-col]::before,
+  .cmp-table.is-stack td.is-jev[data-col]::before {
+    padding-left: 14px;
+    background: linear-gradient(var(--c), var(--c)) no-repeat left center / 8px 8px;
+  }
+  .cmp-table.is-stack td.num[data-col]::before {
+    margin-left: auto;
+  }
+  .cmp-table.is-stack td[colspan],
+  .cmp-table.is-models td:last-child {
+    grid-column: 1 / -1;
+  }
+  .cmp-table.is-models td:last-child {
+    padding-top: 2px;
+  }
+  .cmp-code {
+    padding: 10px 12px;
+    font-size: 12px;
+    white-space: pre-wrap;
+  }
+  /* Long lines in code samples wrap instead of hiding off the right edge. */
+  .cmp-section .cmp-code code {
+    overflow-wrap: anywhere;
+  }
+  .cmp-callout {
+    grid-template-columns: 18px minmax(0, 1fr);
+    gap: 9px;
+    padding: 12px 14px 12px 11px;
+  }
+  .cmp-callout-icon {
+    width: 18px;
+    height: 18px;
+    margin-top: 4px;
   }
   .cmp-figure {
     padding: 14px 14px 16px;
@@ -1112,6 +1266,13 @@
   }
   .cmp-brand-name {
     font-size: 20px;
+  }
+  .cmp-table {
+    font-size: 13px;
+  }
+  .cmp-table th,
+  .cmp-table td {
+    padding: 8px 8px;
   }
 }
 
