@@ -6,6 +6,7 @@ export const DECISIONS_PATH = '/alpha/decisions';
 export const QUESTION_KEY = 'decision';
 export const DEFAULT_MODEL = 'typesafe/jev-1.13';
 
+// The models listed first, also when OpenRouter's model list can't be read.
 // `images` is how many images the model takes per request (0 = text only); `detail`
 // marks a model that honours the image detail setting (other image models ignore it).
 export const MODELS = [
@@ -16,8 +17,9 @@ export const MODELS = [
 
 // The page sends at most this many images per call, whatever the model allows.
 export const UI_MAX_IMAGES = 8;
-// Image limits OpenRouter documents for image-capable models outside MODELS.
-const KNOWN_IMAGE_LIMITS = { 'cloudflare/clef': 4, 'cloudflare/clef-flash': 4 };
+// Image limits OpenRouter documents for image-capable models outside MODELS; other
+// image models get the cautious default.
+const KNOWN_IMAGE_LIMITS = { 'cloudflare/clef': 4, 'cloudflare/clef-flash': 4, 'cloudflare/clef-omni': 4 };
 const DEFAULT_IMAGE_LIMIT = 4;
 // No "high": the page shrinks every image to at most 1024 px, and at that size
 // high detail reads (and bills) exactly like auto.
@@ -37,20 +39,89 @@ export function imageDetailSupported(modelId) {
   return Boolean(builtinModel(modelId)?.detail);
 }
 
-// Whether `modelId` takes images, and how many this page will send.
-// `catalog` is OpenRouter's model list (GET /api/v1/models), or null if unavailable.
-// supported: true / false, or null when the model is unknown (custom name, no catalog).
+// OpenRouter's list of decision models (GET /api/v1/models?output_modalities=decisions),
+// reduced to what the page uses: { id, slug, name, images, context, price }. `price` is
+// USD per input token (null if unknown). Entries that are not decision models or carry
+// an odd id are dropped.
+const MODEL_ID = /^~?[a-z0-9][\w.-]*\/[\w.:-]+$/i;
+const MAX_CATALOG = 500;
+export function parseCatalog(json) {
+  const out = [];
+  const seen = new Set();
+  for (const m of Array.isArray(json?.data) ? json.data : []) {
+    const id = typeof m?.id === 'string' ? m.id.trim() : '';
+    const arch = m?.architecture ?? {};
+    if (!MODEL_ID.test(id) || seen.has(id)) continue;
+    if (!Array.isArray(arch.output_modalities) || !arch.output_modalities.includes('decisions')) continue;
+    seen.add(id);
+    const name = typeof m.name === 'string' ? m.name.trim().slice(0, 80) : '';
+    const context = Number(m.context_length);
+    const price = m.pricing?.prompt == null || m.pricing.prompt === '' ? NaN : Number(m.pricing.prompt);
+    out.push({
+      id,
+      slug: typeof m.canonical_slug === 'string' ? m.canonical_slug : '',
+      name: name || id,
+      images: Array.isArray(arch.input_modalities) && arch.input_modalities.includes('image'),
+      context: Number.isFinite(context) && context > 0 ? context : 0,
+      price: Number.isFinite(price) && price >= 0 ? price : null,
+    });
+    if (out.length >= MAX_CATALOG) break;
+  }
+  return out;
+}
+
+// The catalog entry for `modelId`: by id, by dated slug, or without a routing variant.
+export function findModel(modelId, catalog) {
+  const id = String(modelId ?? '').trim();
+  if (!id || !Array.isArray(catalog)) return null;
+  const find = (key) => catalog.find((m) => m.id === key || (m.slug && m.slug === key));
+  return find(id) ?? find(withoutVariant(id)) ?? null;
+}
+
+// Whether `modelId` takes images, and how many this page will send. `catalog` comes
+// from parseCatalog, or is null when OpenRouter's list is unavailable; when it lists
+// the model, it decides. supported: true / false, or null when the model is unknown.
 export function imageSupport(modelId, catalog) {
   const id = String(modelId ?? '').trim();
+  const entry = findModel(id, catalog);
+  if (entry) {
+    const base = withoutVariant(entry.id);
+    const limit = MODELS.find((m) => m.id === base)?.images || KNOWN_IMAGE_LIMITS[base] || DEFAULT_IMAGE_LIMIT;
+    return { supported: entry.images, max: entry.images ? Math.min(UI_MAX_IMAGES, limit) : 0, source: 'catalog' };
+  }
   const known = builtinModel(id);
   if (known) return { supported: known.images > 0, max: Math.min(UI_MAX_IMAGES, known.images), source: 'builtin' };
-  const find = (key) => (catalog ?? []).find((m) => m?.id === key || m?.canonical_slug === key);
-  const entry = find(id) ?? find(withoutVariant(id));
-  if (!entry) return { supported: null, max: Math.min(UI_MAX_IMAGES, DEFAULT_IMAGE_LIMIT), source: 'unknown' };
-  const supported = Boolean(entry.architecture?.input_modalities?.includes('image'));
-  const base = withoutVariant(String(entry.id));
-  const limit = MODELS.find((m) => m.id === base)?.images || KNOWN_IMAGE_LIMITS[base] || DEFAULT_IMAGE_LIMIT;
-  return { supported, max: supported ? Math.min(UI_MAX_IMAGES, limit) : 0, source: 'catalog' };
+  return { supported: null, max: Math.min(UI_MAX_IMAGES, DEFAULT_IMAGE_LIMIT), source: 'unknown' };
+}
+
+// The options of the model list: the built-in models, then the rest of `catalog` in
+// two groups, models that take images and text-only ones, each sorted by name.
+export function modelGroups(catalog) {
+  const others = (Array.isArray(catalog) ? catalog : []).filter((e) => !MODELS.some((m) => m.id === e.id));
+  const byName = (a, b) => a.name.localeCompare(b.name, 'en') || a.id.localeCompare(b.id, 'en');
+  const option = (e) => ({ id: e.id, label: `${e.name}（${e.images ? '支持图片' : '只支持文字'}）` });
+  const group = (label, list) => ({ label: `${label}（${list.length} 个）`, options: list.sort(byName).map(option) });
+  return [
+    { label: '常用', options: MODELS.map((m) => ({ id: m.id, label: m.label })) },
+    group('其他支持图片的模型', others.filter((e) => e.images)),
+    group('其他只支持文字的模型', others.filter((e) => !e.images)),
+  ].filter((g) => g.options.length);
+}
+
+// "输入 $0.24 / 百万 token" from a per-token price; '免费' for 0, '' when unknown.
+export function formatModelPrice(price) {
+  if (price == null || !Number.isFinite(price) || price < 0) return '';
+  if (price === 0) return '免费';
+  // Rounded first: 0.0000001 * 1e6 is 0.09999999999999999.
+  const perMillion = Number((price * 1e6).toPrecision(9));
+  const shown = perMillion >= 0.1 ? perMillion.toFixed(2) : String(Number(perMillion.toPrecision(2)));
+  return `输入 $${shown} / 百万 token`;
+}
+
+// The model's page on OpenRouter, or '' for an id that does not look like one.
+export function modelPageUrl(id) {
+  const path = String(id ?? '').trim().replace(/^~/, '');
+  return /^[a-z0-9][\w.-]*\/[\w.:-]+$/i.test(path) ? `https://openrouter.ai/${path}` : '';
 }
 
 export const TYPES = ['noul', 'choice', 'score'];
@@ -464,7 +535,7 @@ const STATUS_TEXT = {
   403: ['没有权限', '这个 Key 可能无权使用该模型，或内容触发了审核。'],
   404: ['找不到接口或模型', '检查 Base URL 和模型名称。'],
   408: ['请求超时', '稍后再试。'],
-  413: ['内容太长', '缩短背景内容或减少选项后再试。'],
+  413: ['内容太长', '缩短背景内容、减少选项或图片后再试。'],
   429: ['请求太频繁', '稍等片刻再试。'],
   500: ['服务器内部错误', '稍后再试。'],
   502: ['上游服务出错', '模型服务商暂时出错，稍后再试。'],
@@ -497,6 +568,8 @@ export const REFUSAL_TEXT = {
   hint: '这是模型的内容安全策略在起作用（比如问题涉及敏感的个人信息）。重试会得到同样的结果，请换个问法，或换一个模型。',
 };
 
+const TYPE_NAMES = { noul: '是 / 否', choice: '单选', score: '打分' };
+
 export function parseError(status, bodyText) {
   let [title, hint] = STATUS_TEXT[status] ?? [`请求失败（HTTP ${status}）`, '稍后再试，或检查 Base URL 是否正确。'];
   let detail = '';
@@ -512,6 +585,13 @@ export function parseError(status, bodyText) {
   detail = formatIssues(detail);
   if (detail.length > 800) detail = `${detail.slice(0, 800)}…`;
   if (/refused to answer/i.test(detail)) ({ title, hint } = REFUSAL_TEXT);
+  // Some models take only one question type, e.g. "Respan only accepts noul questions …".
+  const only = detail.match(/only accepts (noul|choice|score) questions/i);
+  if (only) {
+    const name = TYPE_NAMES[only[1].toLowerCase()];
+    title = `这个模型只支持「${name}」题`;
+    hint = `请在第 2 步把题型换成「${name}」再试，或者换一个模型。`;
+  }
   return { status, title, hint, detail };
 }
 

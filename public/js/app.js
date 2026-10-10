@@ -6,7 +6,6 @@ import {
   EXAMPLES,
   IMAGE_DETAILS,
   LIMITS,
-  MODELS,
   PLACEHOLDER_EXAMPLE,
   REFUSAL_TEXT,
   TYPES,
@@ -15,14 +14,19 @@ import {
   choiceHint,
   dataUrlBytes,
   displayItems,
+  findModel,
+  formatModelPrice,
   formatUsd,
   imageDetailSupported,
   imageSupport,
   isAnswerRefusedError,
   isAnswerShapeError,
   migrateLegacyForm,
+  modelGroups,
+  modelPageUrl,
   modelShortName,
   normalizeKey,
+  parseCatalog,
   parseError,
   readAnswer,
   redactImages,
@@ -38,6 +42,7 @@ const STORE_PREFIX = 'simple-jev:';
 const FORM_STORE = 'simple-jev:form:v2';
 const LEGACY_FORM_STORE = 'simple-jev:form';
 const KEY_STORE = 'simple-jev:key';
+const CATALOG_STORE = 'simple-jev:catalog:v1';
 const CACHE_CLEARED_HASH = '#cache-cleared';
 const CUSTOM_MODEL = '__custom';
 const REQUEST_TIMEOUT_MS = 60_000;
@@ -206,6 +211,7 @@ const toggleKeyBtn = $('toggle-key');
 const rememberKey = $('remember-key');
 const modelSelect = $('model-select');
 const modelCustom = $('model-custom');
+const modelInfo = $('model-info');
 const questionInput = $('question');
 const contextInput = $('context');
 const imageField = $('image-field');
@@ -261,6 +267,9 @@ baseUrlInput.addEventListener('input', () => {
   state.baseUrl = baseUrlInput.value;
   baseUrlInput.removeAttribute('aria-invalid');
   renderEndpoint();
+  // The OpenRouter model list belongs in the menu only while the address is OpenRouter's.
+  loadCatalog();
+  renderModel();
   onModelChanged();
   saveState();
 });
@@ -290,15 +299,153 @@ rememberKey.addEventListener('change', () => {
   else storage.remove(KEY_STORE);
 });
 
+// ---- model list ------------------------------------------------------------
+
+// OpenRouter publishes its decision models (no key needed): they fill the model menu
+// and say which models take images. The last list read is kept in the browser, so on
+// the next visit the menu is complete at once while a fresh copy loads.
+const CATALOG_PATH = '/api/v1/models?output_modalities=decisions';
+let catalog = null; // parseCatalog() entries, or null
+let catalogOrigin = null; // the OpenRouter address `catalog` came from
+let catalogStatus = 'idle'; // idle | loading | ready | failed
+let catalogTried = null; // address of the last attempt, so a failure is not retried on every keystroke
+let customMode = false; // 自定义模型名称 is chosen
+let shownModels = null; // the menu on screen, so it is rebuilt only when it changes
+
+function openRouterOrigin() {
+  const r = resolveEndpoint(state.baseUrl);
+  if (!r.ok) return null;
+  const url = new URL(r.url);
+  return /(^|\.)openrouter\.ai$/i.test(url.hostname) ? url.origin : null;
+}
+
+// The list for the menu: only while the Base URL is the address it came from.
+function listedCatalog() {
+  const origin = openRouterOrigin();
+  return origin && origin === catalogOrigin ? catalog : null;
+}
+
+// Cached in the API's own shape, so reading it back goes through parseCatalog too.
+function cacheCatalog(origin, list) {
+  const data = list.map((m) => ({
+    id: m.id,
+    canonical_slug: m.slug,
+    name: m.name,
+    context_length: m.context,
+    pricing: { prompt: m.price == null ? null : String(m.price) },
+    architecture: { input_modalities: m.images ? ['text', 'image'] : ['text'], output_modalities: ['decisions'] },
+  }));
+  storage.set(CATALOG_STORE, JSON.stringify({ origin, data }));
+}
+
+function readCachedCatalog() {
+  try {
+    const saved = JSON.parse(storage.get(CATALOG_STORE) ?? 'null');
+    const list = parseCatalog(saved);
+    if (typeof saved?.origin === 'string' && list.length) {
+      catalog = list;
+      catalogOrigin = saved.origin;
+    }
+  } catch {
+    // Unreadable cache: the fresh list replaces it.
+  }
+}
+
+// `retry` re-reads after a failure; otherwise a failed address waits for 重试.
+async function loadCatalog(retry = false) {
+  const origin = openRouterOrigin();
+  if (!origin || catalogStatus === 'loading') return;
+  if (catalogStatus === 'ready' && catalogOrigin === origin) return;
+  if (catalogStatus === 'failed' && catalogTried === origin && !retry) return;
+  catalogStatus = 'loading';
+  catalogTried = origin;
+  renderModel();
+  renderImageField();
+  try {
+    const res = await fetch(`${origin}${CATALOG_PATH}`, { credentials: 'omit', referrerPolicy: 'no-referrer' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const list = parseCatalog(await res.json());
+    if (!list.length) throw new Error('empty list');
+    catalog = list;
+    catalogOrigin = origin;
+    catalogStatus = 'ready';
+    cacheCatalog(origin, list);
+  } catch {
+    catalogStatus = 'failed';
+  }
+  renderModel();
+  onModelChanged();
+  // Image support may have changed what the form would send.
+  markStale();
+}
+
 function renderModel() {
-  modelSelect.replaceChildren(
-    ...MODELS.map((m) => new Option(m.label, m.id)),
-    new Option('自定义模型名称…', CUSTOM_MODEL),
-  );
-  const known = MODELS.some((m) => m.id === state.model);
-  modelSelect.value = known ? state.model : CUSTOM_MODEL;
-  modelCustom.hidden = known;
-  modelCustom.value = known ? '' : state.model;
+  const groups = modelGroups(listedCatalog());
+  const listed = groups.some((g) => g.options.some((o) => o.id === state.model));
+  // A name being typed stays in the text box, even when it turns out to be listed.
+  if (customMode && listed && document.activeElement !== modelCustom) customMode = false;
+  if (!listed) customMode = true;
+  const loading = catalogStatus === 'loading' && !listedCatalog();
+  const signature = JSON.stringify([groups, loading]);
+  if (signature !== shownModels) {
+    shownModels = signature;
+    const note = new Option('正在读取 OpenRouter 上的全部决策模型…', '');
+    note.disabled = true;
+    modelSelect.replaceChildren(
+      ...groups.map((g) => {
+        const group = document.createElement('optgroup');
+        group.label = g.label;
+        group.append(...g.options.map((o) => new Option(o.label, o.id)));
+        return group;
+      }),
+      ...(loading ? [note] : []),
+      new Option('自定义模型名称…', CUSTOM_MODEL),
+    );
+  }
+  modelSelect.value = customMode ? CUSTOM_MODEL : state.model;
+  modelCustom.hidden = !customMode;
+  if (customMode && modelCustom.value.trim() !== state.model) modelCustom.value = state.model;
+  renderModelInfo();
+}
+
+// One line under the menu about the chosen model: images, context, price, its page.
+function renderModelInfo() {
+  const id = currentModel();
+  const entry = findModel(id, catalog);
+  modelInfo.replaceChildren();
+  if (entry) {
+    const support = imageSupport(id, catalog);
+    const facts = [
+      entry.name,
+      support.supported ? `支持图片（每次最多 ${support.max} 张）` : '只支持文字',
+      entry.context ? `上下文 ${entry.context.toLocaleString('en-US')} token` : '',
+      formatModelPrice(entry.price),
+    ];
+    modelInfo.append(facts.filter(Boolean).join(' · '));
+    const href = modelPageUrl(entry.id);
+    if (href) {
+      const link = el('a', null, '模型页');
+      link.href = href;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      modelInfo.append(' · ', link);
+    }
+  } else if (openRouterOrigin()) {
+    if (catalogStatus === 'loading') {
+      modelInfo.append('正在读取 OpenRouter 的模型列表…');
+    } else if (catalogStatus === 'failed' && !listedCatalog()) {
+      const retry = el('button', 'link-btn', '重试');
+      retry.type = 'button';
+      retry.addEventListener('click', () => {
+        modelSelect.focus(); // the button goes away with this line
+        loadCatalog(true);
+      });
+      modelInfo.append('没能读取 OpenRouter 的模型列表，下拉框里只有常用模型。', retry);
+    } else if (customMode && id && listedCatalog()) {
+      modelInfo.append('OpenRouter 的决策模型列表里没有这个名称，请检查拼写。');
+    }
+  }
+  modelInfo.hidden = !modelInfo.firstChild;
 }
 
 function currentModel() {
@@ -306,9 +453,9 @@ function currentModel() {
 }
 
 modelSelect.addEventListener('change', () => {
-  const custom = modelSelect.value === CUSTOM_MODEL;
-  modelCustom.hidden = !custom;
-  if (custom) modelCustom.focus();
+  customMode = modelSelect.value === CUSTOM_MODEL;
+  modelCustom.hidden = !customMode;
+  if (customMode) modelCustom.focus();
   state.model = currentModel();
   onModelChanged();
   markStale();
@@ -323,12 +470,12 @@ modelCustom.addEventListener('input', () => {
   saveState();
 });
 
-// Whether images can be sent depends on the model; names we don't know are looked up.
-// A message about adding images was about the previous model, so it goes.
+// Whether images can be sent depends on the model. A message about adding images
+// was about the previous model, so it goes.
 function onModelChanged() {
   const model = currentModel();
   if (imageMessage && model !== imageMessageModel) imageMessage = '';
-  if (model && imageSupport(model, null).source !== 'builtin') loadCatalog();
+  renderModelInfo();
   renderImageField();
 }
 
@@ -477,37 +624,6 @@ function loadExample(ex) {
 }
 
 // ---- images ----------------------------------------------------------------
-
-// OpenRouter's model list, fetched once, to tell whether a custom model name takes images.
-let catalog = null;
-let catalogStatus = 'idle'; // idle | loading | ready | failed
-
-function openRouterOrigin() {
-  const r = resolveEndpoint(state.baseUrl);
-  if (!r.ok) return null;
-  const url = new URL(r.url);
-  return /(^|\.)openrouter\.ai$/i.test(url.hostname) ? url.origin : null;
-}
-
-async function loadCatalog() {
-  const origin = openRouterOrigin();
-  if (catalogStatus !== 'idle' || !origin) return;
-  catalogStatus = 'loading';
-  renderImageField();
-  try {
-    const res = await fetch(`${origin}/api/v1/models?output_modalities=decisions`, {
-      credentials: 'omit',
-      referrerPolicy: 'no-referrer',
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const list = (await res.json())?.data;
-    catalog = Array.isArray(list) ? list : [];
-    catalogStatus = 'ready';
-  } catch {
-    catalogStatus = 'failed';
-  }
-  renderImageField();
-}
 
 // { supported: true | false | null (unknown), max, checking }
 function currentImageSupport() {
@@ -738,7 +854,7 @@ function renderImageField() {
   const model = currentModel() || '这个模型';
   let text;
   if (blocked) {
-    text = `${model} 只支持文字，看不到图片。要判断图片，请在上方「模型」里选择 GPT-6 Luna Decisions。`;
+    text = `${model} 只支持文字，看不到图片。要判断图片，请在上方「模型」里选一个标着「支持图片」的模型，比如 GPT-6 Luna Decisions。`;
     if (n) text += `已添加的 ${n} 张图片不会发送，请删除，或换用支持图片的模型。`;
   } else if (support.checking) {
     text = '正在查询这个模型是否支持图片…';
@@ -1379,8 +1495,10 @@ function renderAll() {
 const savedKey = storage.get(KEY_STORE);
 keyInput.value = savedKey ?? '';
 rememberKey.checked = Boolean(savedKey);
+readCachedCatalog();
 renderExamples();
 renderAll();
+loadCatalog();
 
 if (location.hash === CACHE_CLEARED_HASH) {
   history.replaceState(null, '', `${location.pathname}${location.search}`);

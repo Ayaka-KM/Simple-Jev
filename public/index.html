@@ -65,9 +65,10 @@
           <div class="field">
             <label for="model-select">模型</label>
             <div class="input-row">
-              <select id="model-select"></select>
-              <input id="model-custom" type="text" autocomplete="off" spellcheck="false" placeholder="例如 typesafe/jev-1.13" aria-label="自定义模型名称" hidden>
+              <select id="model-select" aria-describedby="model-info"></select>
+              <input id="model-custom" type="text" autocomplete="off" spellcheck="false" placeholder="例如 typesafe/jev-1.13" aria-label="自定义模型名称" aria-describedby="model-info" hidden>
             </div>
+            <p class="hint" id="model-info" hidden></p>
           </div>
         </section>
 
@@ -181,8 +182,8 @@
 
       <aside class="card about">
         <h2 class="card-title">关于决策模型</h2>
-        <p>Jev 和 GPT-6 Luna Decisions 都是<strong>决策模型</strong>：它们不写文字、不解释理由，只在你给定的选项之间分配概率。答案好不好，很大程度取决于选项怎么写。只有 GPT-6 Luna Decisions 能看图片。</p>
-        <p class="hint">都只按输入 token 计费，输出免费；一次纯文字调用通常不到 $0.0001，每张图片另加最多约 $0.0001。两者的详细区别见<a href="/compare.html">模型对比</a>，也可以看 <a href="https://openrouter.ai/docs/guides/community/jev" target="_blank" rel="noopener noreferrer">Jev 文档</a>和 <a href="https://openrouter.ai/docs/guides/community/multimodal-decisions" target="_blank" rel="noopener noreferrer">图片输入文档</a>。</p>
+        <p>「模型」列表里的 Jev、GPT-6 Luna Decisions 等都是<strong>决策模型</strong>：它们不写文字、不解释理由，只在你给定的选项之间分配概率。答案好不好，很大程度取决于选项怎么写。列表里标着「支持图片」的模型才能看图片。</p>
+        <p class="hint">列表来自 OpenRouter 公开的模型目录，打开页面时更新。决策模型都只按输入 token 计费，输出免费，各模型的价格显示在列表下方；一次纯文字调用通常不到 $0.0001。Jev 和 GPT-6 Luna 的详细区别见<a href="/compare.html">模型对比</a>，也可以看 <a href="https://openrouter.ai/docs/guides/community/jev" target="_blank" rel="noopener noreferrer">Jev 文档</a>和 <a href="https://openrouter.ai/docs/guides/community/multimodal-decisions" target="_blank" rel="noopener noreferrer">图片输入文档</a>。</p>
       </aside>
     </div>
 

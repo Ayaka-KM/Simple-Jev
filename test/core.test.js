@@ -17,6 +17,11 @@ import {
   migrateLegacyForm,
   modelShortName,
   imageDetailSupported,
+  parseCatalog,
+  findModel,
+  modelGroups,
+  formatModelPrice,
+  modelPageUrl,
   normalizeKey,
   redactImages,
   parseError,
@@ -476,19 +481,111 @@ describe('buildCurl', () => {
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 const JPG = 'data:image/jpeg;base64,/9j/4AAQ';
 
+// A catalog entry as OpenRouter's /api/v1/models returns it.
+const entry = (id, extra = {}) => ({
+  id,
+  canonical_slug: extra.slug ?? id,
+  name: extra.name ?? id,
+  context_length: extra.context ?? 65536,
+  pricing: { prompt: extra.price ?? '0.00000004', completion: '0' },
+  architecture: { input_modalities: extra.images ? ['text', 'image'] : ['text'], output_modalities: extra.output ?? ['decisions'] },
+});
+
+describe('parseCatalog', () => {
+  it('keeps decision models with the fields the page uses', () => {
+    const list = parseCatalog({
+      data: [
+        entry('cloudflare/clef', { name: 'Cloudflare: Clef', images: true, price: '0.00000024', context: 65536 }),
+        entry('respan/span-01', { name: 'Respan: Span-01', context: 0, price: '0' }),
+        entry('openai/gpt-6', { output: ['text'] }),
+        entry('bad id with spaces'),
+        entry('cloudflare/clef'),
+        { id: 42 },
+        null,
+      ],
+    });
+    assert.deepEqual(list, [
+      { id: 'cloudflare/clef', slug: 'cloudflare/clef', name: 'Cloudflare: Clef', images: true, context: 65536, price: 0.00000024 },
+      { id: 'respan/span-01', slug: 'respan/span-01', name: 'Respan: Span-01', images: false, context: 0, price: 0 },
+    ]);
+  });
+  it('copes with a missing or odd response', () => {
+    assert.deepEqual(parseCatalog(null), []);
+    assert.deepEqual(parseCatalog({ data: 'x' }), []);
+    const [m] = parseCatalog({ data: [{ id: '~typesafe/jev-latest', architecture: { output_modalities: ['decisions'] } }] });
+    assert.deepEqual(m, { id: '~typesafe/jev-latest', slug: '', name: '~typesafe/jev-latest', images: false, context: 0, price: null });
+  });
+});
+
+describe('findModel / modelGroups', () => {
+  const catalog = parseCatalog({
+    data: [
+      entry('typesafe/jev-1.13', { name: 'TypeSafe: Jev 1.13' }),
+      entry('openai/gpt-6-luna-decisions', { name: 'OpenAI: GPT-6 Luna Decisions', images: true }),
+      entry('liquid/d1', { name: 'LiquidAI: d1', slug: 'liquid/d1-20260930' }),
+      entry('cloudflare/clef-flash', { name: 'Cloudflare: Clef Flash', images: true }),
+      entry('cloudflare/clef', { name: 'Cloudflare: Clef', images: true }),
+      entry('inception/mercury-decide:free', { name: 'Inception: Mercury Decide (free)' }),
+    ],
+  });
+  it('finds a model by id, dated slug or without its variant', () => {
+    assert.equal(findModel('liquid/d1-20260930', catalog).id, 'liquid/d1');
+    assert.equal(findModel('cloudflare/clef:nitro', catalog).id, 'cloudflare/clef');
+    assert.equal(findModel('someone/else', catalog), null);
+    assert.equal(findModel('liquid/d1', null), null);
+  });
+  it('lists the built-in models first, then the others by image support and name', () => {
+    const groups = modelGroups(catalog);
+    assert.deepEqual(groups.map((g) => g.label), ['常用', '其他支持图片的模型（2 个）', '其他只支持文字的模型（2 个）']);
+    assert.deepEqual(groups[0].options.map((o) => o.id), ['typesafe/jev-1.13', '~typesafe/jev-latest', 'openai/gpt-6-luna-decisions']);
+    assert.deepEqual(groups[1].options, [
+      { id: 'cloudflare/clef', label: 'Cloudflare: Clef（支持图片）' },
+      { id: 'cloudflare/clef-flash', label: 'Cloudflare: Clef Flash（支持图片）' },
+    ]);
+    assert.deepEqual(groups[2].options.map((o) => o.label), ['Inception: Mercury Decide (free)（只支持文字）', 'LiquidAI: d1（只支持文字）']);
+  });
+  it('shows only the built-in models without a catalog', () => {
+    assert.deepEqual(modelGroups(null).map((g) => g.label), ['常用']);
+  });
+});
+
+describe('formatModelPrice / modelPageUrl', () => {
+  it('shows the input price per million tokens', () => {
+    assert.equal(formatModelPrice(0.0000001), '输入 $0.10 / 百万 token');
+    assert.equal(formatModelPrice(0.000000042), '输入 $0.042 / 百万 token');
+    assert.equal(formatModelPrice(0.0000012), '输入 $1.20 / 百万 token');
+    assert.equal(formatModelPrice(0), '免费');
+    assert.equal(formatModelPrice(null), '');
+  });
+  it('links to the model page only for model-like ids', () => {
+    assert.equal(modelPageUrl('~typesafe/jev-latest'), 'https://openrouter.ai/typesafe/jev-latest');
+    assert.equal(modelPageUrl('inception/mercury-decide:free'), 'https://openrouter.ai/inception/mercury-decide:free');
+    assert.equal(modelPageUrl('a/b?x=1'), '');
+    assert.equal(modelPageUrl('javascript:alert(1)'), '');
+  });
+});
+
 describe('imageSupport', () => {
-  const catalog = [
-    { id: 'cloudflare/clef', canonical_slug: 'cloudflare/clef', architecture: { input_modalities: ['text', 'image'] } },
-    { id: 'liquid/d1', canonical_slug: 'liquid/d1-20260930', architecture: { input_modalities: ['text'] } },
-    { id: 'inception/mercury-decide:free', canonical_slug: 'inception/mercury-decide-20260930', architecture: { input_modalities: ['text'] } },
-  ];
+  const catalog = parseCatalog({
+    data: [
+      entry('cloudflare/clef', { images: true }),
+      entry('cloudflare/clef-omni', { images: true }),
+      entry('perplexity/pplx-decider-v1.1-27b', { images: true }),
+      entry('liquid/d1', { slug: 'liquid/d1-20260930' }),
+      entry('inception/mercury-decide:free', { slug: 'inception/mercury-decide-20260930' }),
+      entry('openai/gpt-6-luna-decisions', { images: true }),
+    ],
+  });
   it('knows the built-in models', () => {
     assert.deepEqual(imageSupport('openai/gpt-6-luna-decisions', null), { supported: true, max: 8, source: 'builtin' });
     assert.deepEqual(imageSupport('typesafe/jev-1.13', null), { supported: false, max: 0, source: 'builtin' });
     assert.equal(imageSupport('~typesafe/jev-latest', null).supported, false);
   });
-  it('looks other models up in the catalog, by id or dated slug', () => {
+  it('looks models up in the catalog, by id or dated slug, with documented image limits', () => {
     assert.deepEqual(imageSupport('cloudflare/clef', catalog), { supported: true, max: 4, source: 'catalog' });
+    assert.deepEqual(imageSupport('cloudflare/clef-omni', catalog), { supported: true, max: 4, source: 'catalog' });
+    assert.deepEqual(imageSupport('perplexity/pplx-decider-v1.1-27b', catalog), { supported: true, max: 4, source: 'catalog' });
+    assert.deepEqual(imageSupport('openai/gpt-6-luna-decisions', catalog), { supported: true, max: 8, source: 'catalog' });
     assert.equal(imageSupport('liquid/d1-20260930', catalog).supported, false);
     assert.equal(imageSupport('inception/mercury-decide:free', catalog).supported, false);
   });
@@ -578,6 +675,12 @@ describe('refusals', () => {
     assert.match(e.hint, /重试会得到同样的结果/);
     assert.match(e.detail, /refused/);
     assert.equal(parseError(502, '{"error":{"message":"Bad gateway"}}').title, '上游服务出错');
+  });
+  it('explains a model that takes only one question type', () => {
+    const e = parseError(400, JSON.stringify({ error: { message: 'Respan only accepts noul questions whose instructions and criteria are plain strings (question "decision")', code: 400 } }));
+    assert.equal(e.title, '这个模型只支持「是 / 否」题');
+    assert.match(e.hint, /换成「是 \/ 否」/);
+    assert.match(e.detail, /Respan/);
   });
   it('recognises a native refusal answer', () => {
     assert.throws(

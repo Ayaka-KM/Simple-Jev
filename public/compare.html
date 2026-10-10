@@ -812,9 +812,9 @@
         <h2 id="in-app-h" class="cmp-h2"><span class="cmp-num" aria-hidden="true">11</span>在 Simple Jev 里使用 Luna</h2>
         <p>为了接入 Luna，调用工具里新增了这些功能：</p>
         <ol class="cmp-steps">
-          <li><strong>选模型。</strong>模型下拉框里新增“GPT-6 Luna Decisions（OpenAI，支持图片）”。</li>
+          <li><strong>选模型。</strong>模型下拉框列出 OpenRouter 上的全部决策模型：“GPT-6 Luna Decisions（OpenAI，支持图片）”和 Jev 排在最前，其余按“支持图片”和“只支持文字”分组，选中后下方显示它的价格、上下文和是否支持图片。</li>
           <li><strong>加图片。</strong>背景内容下方可以点击选择、拖拽或粘贴图片。每张图都会在浏览器里重新画成最长边不超过 1024 像素的 JPEG：透明的部分填成白色（否则模型会把它看成黑色），照片里的 EXIF 信息（比如拍摄地点）也不会发出去。每次最多 8 张（网页自己的限制，低于 Luna 的 128 张）。图片只在内存里，不保存到浏览器，点「清空」时一起清掉。</li>
-          <li><strong>只有支持图片的模型才能上传。</strong>选 Jev 这类纯文字模型时，图片区域会禁用并说明原因（Jev 收到图片会乱猜而不报错）。填自定义模型名称时，会去 OpenRouter 模型目录查它是否支持图片。</li>
+          <li><strong>只有支持图片的模型才能上传。</strong>是否支持图片以 OpenRouter 模型目录为准。选 Jev 这类纯文字模型时，图片区域会禁用并说明原因（Jev 收到图片会乱猜而不报错），已添加的图片也不会发送。</li>
           <li><strong>选图片精度。</strong>选 Luna 并加了图片后，可选“自动”或“低”：自动每张最多约 1,000 token；低先缩到 512 像素以内，每张最多约 260 token。网页发出的图不超过 1024 像素，这时“高”和“自动”完全一样，所以没有提供“高”。其他图片模型（如 Clef）不理会这个设置，选它们时不显示。</li>
           <li><strong>查看原始请求。</strong>原始请求和 curl 命令里的图片 base64 会截断显示。</li>
           <li><strong>拒答提示。</strong>Luna 拒答时（HTTP 502 + “refused to answer”），会显示“模型拒绝回答这道题”，并说明重试没用、需要换个问法。</li>
