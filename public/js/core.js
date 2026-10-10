@@ -21,6 +21,10 @@ export const UI_MAX_IMAGES = 8;
 // image models get the cautious default.
 const KNOWN_IMAGE_LIMITS = { 'cloudflare/clef': 4, 'cloudflare/clef-flash': 4, 'cloudflare/clef-omni': 4 };
 const DEFAULT_IMAGE_LIMIT = 4;
+// OpenRouter lists these as taking images, but on 2026-10-10 (served by PrimeIntellect)
+// both got a plain test image wrong: a red left half read as blue, a white square
+// missed. The page treats them as text-only, so no image is sent to them.
+const IMAGES_UNREADABLE = new Set(['cloudflare/clef', 'cloudflare/clef-flash']);
 // No "high": the page shrinks every image to at most 1024 px, and at that size
 // high detail reads (and bills) exactly like auto.
 export const IMAGE_DETAILS = ['auto', 'low'];
@@ -80,10 +84,14 @@ export function findModel(modelId, catalog) {
 
 // Whether `modelId` takes images, and how many this page will send. `catalog` comes
 // from parseCatalog, or is null when OpenRouter's list is unavailable; when it lists
-// the model, it decides. supported: true / false, or null when the model is unknown.
+// the model, it decides. supported: true / false, or null when the model is unknown;
+// `unreadable` marks a model the page keeps images from although it is listed with them.
 export function imageSupport(modelId, catalog) {
   const id = String(modelId ?? '').trim();
   const entry = findModel(id, catalog);
+  if (IMAGES_UNREADABLE.has(withoutVariant(entry?.id ?? id))) {
+    return { supported: false, max: 0, source: entry ? 'catalog' : 'builtin', unreadable: true };
+  }
   if (entry) {
     const base = withoutVariant(entry.id);
     const limit = MODELS.find((m) => m.id === base)?.images || KNOWN_IMAGE_LIMITS[base] || DEFAULT_IMAGE_LIMIT;
@@ -95,16 +103,18 @@ export function imageSupport(modelId, catalog) {
 }
 
 // The options of the model list: the built-in models, then the rest of `catalog` in
-// two groups, models that take images and text-only ones, each sorted by name.
+// two groups, models the page sends images to and text-only ones, each sorted by name.
 export function modelGroups(catalog) {
   const others = (Array.isArray(catalog) ? catalog : []).filter((e) => !MODELS.some((m) => m.id === e.id));
   const byName = (a, b) => a.name.localeCompare(b.name, 'en') || a.id.localeCompare(b.id, 'en');
-  const option = (e) => ({ id: e.id, label: `${e.name}（${e.images ? '支持图片' : '只支持文字'}）` });
+  const takesImages = (e) => e.images && !IMAGES_UNREADABLE.has(withoutVariant(e.id));
+  const note = (e) => (takesImages(e) ? '支持图片' : e.images ? '看图不准，只发文字' : '只支持文字');
+  const option = (e) => ({ id: e.id, label: `${e.name}（${note(e)}）` });
   const group = (label, list) => ({ label: `${label}（${list.length} 个）`, options: list.sort(byName).map(option) });
   return [
     { label: '常用', options: MODELS.map((m) => ({ id: m.id, label: m.label })) },
-    group('其他支持图片的模型', others.filter((e) => e.images)),
-    group('其他只支持文字的模型', others.filter((e) => !e.images)),
+    group('其他支持图片的模型', others.filter(takesImages)),
+    group('其他只用文字的模型', others.filter((e) => !takesImages(e))),
   ].filter((g) => g.options.length);
 }
 
@@ -328,9 +338,10 @@ export function buildRequest(form) {
   if (images.length) {
     const support = form.imageSupport ?? { supported: null, max: UI_MAX_IMAGES };
     if (support.supported === false) {
+      const why = support.unreadable ? '看图不准，本页不给它发图片' : '只支持文字，不能发送图片';
       errors.push({
         field: 'images',
-        message: `${model || '这个模型'} 只支持文字，不能发送图片：请删除图片，或换用支持图片的模型（如 GPT-6 Luna Decisions）`,
+        message: `${model || '这个模型'} ${why}：请删除图片，或换用支持图片的模型（如 GPT-6 Luna Decisions）`,
       });
     } else if (images.length > support.max) {
       errors.push({ field: 'images', message: `这个模型每次最多发送 ${support.max} 张图片` });

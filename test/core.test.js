@@ -525,6 +525,8 @@ describe('findModel / modelGroups', () => {
       entry('liquid/d1', { name: 'LiquidAI: d1', slug: 'liquid/d1-20260930' }),
       entry('cloudflare/clef-flash', { name: 'Cloudflare: Clef Flash', images: true }),
       entry('cloudflare/clef', { name: 'Cloudflare: Clef', images: true }),
+      entry('cloudflare/clef-omni', { name: 'Cloudflare: Clef Omni', images: true }),
+      entry('perplexity/pplx-decider-v1.1-27b', { name: 'Perplexity: Decider V1.1 27B', images: true }),
       entry('inception/mercury-decide:free', { name: 'Inception: Mercury Decide (free)' }),
     ],
   });
@@ -536,13 +538,20 @@ describe('findModel / modelGroups', () => {
   });
   it('lists the built-in models first, then the others by image support and name', () => {
     const groups = modelGroups(catalog);
-    assert.deepEqual(groups.map((g) => g.label), ['常用', '其他支持图片的模型（2 个）', '其他只支持文字的模型（2 个）']);
+    assert.deepEqual(groups.map((g) => g.label), ['常用', '其他支持图片的模型（2 个）', '其他只用文字的模型（4 个）']);
     assert.deepEqual(groups[0].options.map((o) => o.id), ['typesafe/jev-1.13', '~typesafe/jev-latest', 'openai/gpt-6-luna-decisions']);
     assert.deepEqual(groups[1].options, [
-      { id: 'cloudflare/clef', label: 'Cloudflare: Clef（支持图片）' },
-      { id: 'cloudflare/clef-flash', label: 'Cloudflare: Clef Flash（支持图片）' },
+      { id: 'cloudflare/clef-omni', label: 'Cloudflare: Clef Omni（支持图片）' },
+      { id: 'perplexity/pplx-decider-v1.1-27b', label: 'Perplexity: Decider V1.1 27B（支持图片）' },
     ]);
-    assert.deepEqual(groups[2].options.map((o) => o.label), ['Inception: Mercury Decide (free)（只支持文字）', 'LiquidAI: d1（只支持文字）']);
+  });
+  it('moves Clef and Clef Flash, which misread images, to the text-only group', () => {
+    assert.deepEqual(modelGroups(catalog)[2].options.map((o) => o.label), [
+      'Cloudflare: Clef（看图不准，只发文字）',
+      'Cloudflare: Clef Flash（看图不准，只发文字）',
+      'Inception: Mercury Decide (free)（只支持文字）',
+      'LiquidAI: d1（只支持文字）',
+    ]);
   });
   it('shows only the built-in models without a catalog', () => {
     assert.deepEqual(modelGroups(null).map((g) => g.label), ['常用']);
@@ -582,7 +591,6 @@ describe('imageSupport', () => {
     assert.equal(imageSupport('~typesafe/jev-latest', null).supported, false);
   });
   it('looks models up in the catalog, by id or dated slug, with documented image limits', () => {
-    assert.deepEqual(imageSupport('cloudflare/clef', catalog), { supported: true, max: 4, source: 'catalog' });
     assert.deepEqual(imageSupport('cloudflare/clef-omni', catalog), { supported: true, max: 4, source: 'catalog' });
     assert.deepEqual(imageSupport('perplexity/pplx-decider-v1.1-27b', catalog), { supported: true, max: 4, source: 'catalog' });
     assert.deepEqual(imageSupport('openai/gpt-6-luna-decisions', catalog), { supported: true, max: 8, source: 'catalog' });
@@ -592,7 +600,12 @@ describe('imageSupport', () => {
   it('ignores a routing variant such as :nitro', () => {
     assert.equal(imageSupport('openai/gpt-6-luna-decisions:nitro', null).supported, true);
     assert.equal(imageSupport('typesafe/jev-1.13:floor', null).supported, false);
-    assert.deepEqual(imageSupport('cloudflare/clef:floor', catalog), { supported: true, max: 4, source: 'catalog' });
+    assert.deepEqual(imageSupport('cloudflare/clef-omni:floor', catalog), { supported: true, max: 4, source: 'catalog' });
+  });
+  it('keeps images from Clef and Clef Flash, listed or not', () => {
+    assert.deepEqual(imageSupport('cloudflare/clef', catalog), { supported: false, max: 0, source: 'catalog', unreadable: true });
+    assert.equal(imageSupport('cloudflare/clef:floor', catalog).unreadable, true);
+    assert.deepEqual(imageSupport('cloudflare/clef-flash', null), { supported: false, max: 0, source: 'builtin', unreadable: true });
   });
   it('says "unknown" when the catalog has no entry', () => {
     assert.equal(imageSupport('someone/new-model', catalog).supported, null);
@@ -622,7 +635,7 @@ describe('buildState / buildRequest with images', () => {
     assert.deepEqual(j.body.state[1], { type: 'image_url', image_url: { url: PNG } });
   });
   it('sends detail only to models that honour it', () => {
-    const clef = buildRequest(form({ model: 'cloudflare/clef', imageSupport: { supported: true, max: 4 }, images: [{ dataUrl: PNG }], imageDetail: 'low' }));
+    const clef = buildRequest(form({ model: 'cloudflare/clef-omni', imageSupport: { supported: true, max: 4 }, images: [{ dataUrl: PNG }], imageDetail: 'low' }));
     assert.deepEqual(clef.body.state[1], { type: 'image_url', image_url: { url: PNG } });
     assert.equal(clef.imageDetail, null);
     assert.equal(buildRequest(form({ images: [{ dataUrl: PNG }], imageDetail: 'low' })).imageDetail, 'low');
@@ -640,6 +653,8 @@ describe('buildState / buildRequest with images', () => {
   it('refuses images for text-only models, too many images and bad data', () => {
     const jev = buildRequest(form({ model: 'typesafe/jev-1.13', imageSupport: { supported: false, max: 0 }, images: [{ dataUrl: PNG }] }));
     assert.ok(jev.errors.some((e) => e.field === 'images' && /只支持文字/.test(e.message)));
+    const clef = buildRequest(form({ model: 'cloudflare/clef', imageSupport: imageSupport('cloudflare/clef', null), images: [{ dataUrl: PNG }] }));
+    assert.ok(clef.errors.some((e) => e.field === 'images' && /看图不准，本页不给它发图片/.test(e.message)));
     const many = buildRequest(form({ imageSupport: { supported: true, max: 1 }, images: [{ dataUrl: PNG }, { dataUrl: PNG }] }));
     assert.ok(many.errors.some((e) => /最多发送 1 张/.test(e.message)));
     const gif = buildRequest(form({ images: [{ dataUrl: 'data:image/gif;base64,R0lGOD' }] }));

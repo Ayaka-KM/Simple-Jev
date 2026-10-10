@@ -417,7 +417,7 @@ function renderModelInfo() {
     const support = imageSupport(id, catalog);
     const facts = [
       entry.name,
-      support.supported ? `支持图片（每次最多 ${support.max} 张）` : '只支持文字',
+      support.supported ? `支持图片（每次最多 ${support.max} 张）` : support.unreadable ? '看图实测不准，本页只发文字' : '只支持文字',
       entry.context ? `上下文 ${entry.context.toLocaleString('en-US')} token` : '',
       formatModelPrice(entry.price),
     ];
@@ -708,10 +708,11 @@ const mayBeImage = (file) => !file.type || file.type.startsWith('image/');
 function addImages(fileList) {
   const files = [...(fileList ?? [])];
   if (!files.length) return imageQueue;
-  if (currentImageSupport().supported === false) {
+  const support = currentImageSupport();
+  if (support.supported === false) {
     setImageMessage('没有添加图片');
     renderImageField();
-    announce(`没有添加图片：${currentModel()} 只支持文字`);
+    announce(`没有添加图片：${currentModel()} ${support.unreadable ? '看图不准，本页不给它发图片' : '只支持文字'}`);
     return imageQueue;
   }
   // Adding is an edit: 撤销 of an earlier 清空 must not overwrite it. A drop with no
@@ -854,7 +855,9 @@ function renderImageField() {
   const model = currentModel() || '这个模型';
   let text;
   if (blocked) {
-    text = `${model} 只支持文字，看不到图片。要判断图片，请在上方「模型」里选一个标着「支持图片」的模型，比如 GPT-6 Luna Decisions。`;
+    text = support.unreadable
+      ? `${model} 虽然在 OpenRouter 上标着支持图片，但实测连简单的测试图都看错，所以本页不给它发图片。要判断图片，请在上方「模型」里选一个标着「支持图片」的模型，比如 GPT-6 Luna Decisions。`
+      : `${model} 只支持文字，看不到图片。要判断图片，请在上方「模型」里选一个标着「支持图片」的模型，比如 GPT-6 Luna Decisions。`;
     if (n) text += `已添加的 ${n} 张图片不会发送，请删除，或换用支持图片的模型。`;
   } else if (support.checking) {
     text = '正在查询这个模型是否支持图片…';
