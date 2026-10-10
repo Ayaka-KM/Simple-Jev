@@ -6,11 +6,12 @@ export const DECISIONS_PATH = '/alpha/decisions';
 export const QUESTION_KEY = 'decision';
 export const DEFAULT_MODEL = 'typesafe/jev-1.13';
 
-// `images` is how many images the model takes per request (0 = text only).
+// `images` is how many images the model takes per request (0 = text only); `detail`
+// marks a model that honours the image detail setting (other image models ignore it).
 export const MODELS = [
   { id: 'typesafe/jev-1.13', label: 'Jev 1.13（只支持文字）', images: 0 },
   { id: '~typesafe/jev-latest', label: 'Jev Latest（自动跟随最新版，只支持文字）', images: 0 },
-  { id: 'openai/gpt-6-luna-decisions', label: 'GPT-6 Luna Decisions（OpenAI，支持图片）', images: 128 },
+  { id: 'openai/gpt-6-luna-decisions', label: 'GPT-6 Luna Decisions（OpenAI，支持图片）', images: 128, detail: true },
 ];
 
 // The page sends at most this many images per call, whatever the model allows.
@@ -26,12 +27,22 @@ const IMAGE_DATA_URL = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
 // A model id without its routing variant: "openai/gpt-6-luna-decisions:nitro" → "openai/gpt-6-luna-decisions".
 const withoutVariant = (id) => id.replace(/:[^/]*$/, '');
 
+function builtinModel(modelId) {
+  const id = String(modelId ?? '').trim();
+  return MODELS.find((m) => m.id === id) ?? MODELS.find((m) => m.id === withoutVariant(id));
+}
+
+// Whether the image detail setting means anything for `modelId`.
+export function imageDetailSupported(modelId) {
+  return Boolean(builtinModel(modelId)?.detail);
+}
+
 // Whether `modelId` takes images, and how many this page will send.
 // `catalog` is OpenRouter's model list (GET /api/v1/models), or null if unavailable.
 // supported: true / false, or null when the model is unknown (custom name, no catalog).
 export function imageSupport(modelId, catalog) {
   const id = String(modelId ?? '').trim();
-  const known = MODELS.find((m) => m.id === id) ?? MODELS.find((m) => m.id === withoutVariant(id));
+  const known = builtinModel(id);
   if (known) return { supported: known.images > 0, max: Math.min(UI_MAX_IMAGES, known.images), source: 'builtin' };
   const find = (key) => (catalog ?? []).find((m) => m?.id === key || m?.canonical_slug === key);
   const entry = find(id) ?? find(withoutVariant(id));
@@ -178,7 +189,8 @@ export function displayItems(type, form) {
   }));
 }
 
-// Builds the POST body. Returns { ok, body, items, errors, stateSource }: `items`
+// Builds the POST body. Returns { ok, body, items, errors, stateSource, imageCount,
+// imageDetail }: `imageDetail` is the detail sent, or null when it does not apply. `items`
 // are the options actually sent, in the user's order. Each error carries the form
 // field it belongs to, and option errors list the offending row indexes in `rows`.
 export function buildRequest(form) {
@@ -258,7 +270,9 @@ export function buildRequest(form) {
   }
 
   if (errors.length) return { ok: false, errors };
-  const detail = IMAGE_DETAILS.includes(form.imageDetail) ? form.imageDetail : 'auto';
+  // Only models that honour the detail setting get it; the others always use their own.
+  const usesDetail = images.length > 0 && imageDetailSupported(model);
+  const detail = usesDetail && IMAGE_DETAILS.includes(form.imageDetail) ? form.imageDetail : 'auto';
   const { state, source } = buildState(form.context, question, images, detail);
   return {
     ok: true,
@@ -266,6 +280,7 @@ export function buildRequest(form) {
     items,
     stateSource: source,
     imageCount: images.length,
+    imageDetail: usesDetail ? detail : null,
     body: { model, state, questions: { [QUESTION_KEY]: q } },
   };
 }

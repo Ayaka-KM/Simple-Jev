@@ -16,6 +16,7 @@ import {
   isAnswerRefusedError,
   migrateLegacyForm,
   modelShortName,
+  imageDetailSupported,
   normalizeKey,
   redactImages,
   parseError,
@@ -522,6 +523,15 @@ describe('buildState / buildRequest with images', () => {
     const j = buildRequest(form({ context: '{"title":"红房子"}', images: [{ dataUrl: PNG }], imageDetail: 'auto' }));
     assert.deepEqual(j.body.state[0], { title: '红房子' });
     assert.deepEqual(j.body.state[1], { type: 'image_url', image_url: { url: PNG } });
+  });
+  it('sends detail only to models that honour it', () => {
+    const clef = buildRequest(form({ model: 'cloudflare/clef', imageSupport: { supported: true, max: 4 }, images: [{ dataUrl: PNG }], imageDetail: 'low' }));
+    assert.deepEqual(clef.body.state[1], { type: 'image_url', image_url: { url: PNG } });
+    assert.equal(clef.imageDetail, null);
+    assert.equal(buildRequest(form({ images: [{ dataUrl: PNG }], imageDetail: 'low' })).imageDetail, 'low');
+    assert.equal(buildRequest(form({ images: [] })).imageDetail, null);
+    assert.equal(imageDetailSupported('openai/gpt-6-luna-decisions:nitro'), true);
+    assert.equal(imageDetailSupported('typesafe/jev-1.13'), false);
   });
   it('sends no detail for a value the page does not offer', () => {
     const h = buildRequest(form({ images: [{ dataUrl: PNG }], imageDetail: 'high' }));

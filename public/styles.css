@@ -490,7 +490,8 @@ textarea:focus-visible {
   margin: 0 0 8px;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  /* Wide enough for a one-line caption, but always at least two columns. */
+  grid-template-columns: repeat(auto-fill, minmax(min(132px, calc(50% - 4px)), 1fr));
   gap: 8px;
 }
 .image-list:empty {
@@ -778,6 +779,11 @@ textarea:focus-visible {
 .add-btn[aria-disabled="true"] {
   opacity: 0.45;
   cursor: not-allowed;
+}
+/* An unavailable 添加图片 can still hold focus: keep its focus ring at full strength. */
+.add-btn[aria-disabled="true"]:focus-visible {
+  opacity: 1;
+  color: var(--ink-3);
 }
 
 .level-num {

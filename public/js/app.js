@@ -16,6 +16,7 @@ import {
   dataUrlBytes,
   displayItems,
   formatUsd,
+  imageDetailSupported,
   imageSupport,
   isAnswerRefusedError,
   isAnswerShapeError,
@@ -419,13 +420,8 @@ function clearInputs() {
       s.score.map((l) => l.text),
       s.images.map((img) => img.id),
     ]);
-  // Already blank (e.g. a double click): keep any pending undo of the real content,
-  // but still drop images that are being prepared.
-  if (content(state) === content(blank)) {
-    if (imagesPending > 0) {
-      resetImageQueue();
-      renderImageField();
-    }
+  // Already blank (e.g. a double click): keep any pending undo of the real content.
+  if (content(state) === content(blank) && !imagesPending) {
     questionInput.focus();
     return;
   }
@@ -437,6 +433,8 @@ function clearInputs() {
     score: state.score.map((l) => ({ ...l })),
     images: state.images.slice(),
   };
+  // Images still being prepared are dropped now and prepared again on 撤销.
+  const unfinished = pendingFiles.slice();
   resetImageQueue();
   Object.assign(state, blank);
   renderAll();
@@ -451,6 +449,7 @@ function clearInputs() {
     renderAll();
     saveState();
     dismissUndo();
+    if (unfinished.length) addImages(unfinished);
     questionInput.focus();
   });
   clearNotice.replaceChildren('已清空', undo);
@@ -524,6 +523,7 @@ let imageMessageModel = '';
 // Adds run one batch at a time, so the limit is checked against the images really added.
 let imageQueue = Promise.resolve();
 let imagesPending = 0; // files of the current list still being prepared
+let pendingFiles = []; // those files, so 撤销 of a 清空 can prepare them again
 // Bumped when the whole list is replaced (清空, 撤销, an example): images still being
 // prepared belong to the old list and are dropped.
 let imageGen = 0;
@@ -545,11 +545,17 @@ function setImageMessage(text) {
 // since it also changes while a custom model name is typed.
 const imageStatus = $('image-status');
 let announceTimer = null;
+let announceQueue = [];
 function announce(text) {
   clearTimeout(announceTimer);
   imageStatus.textContent = '';
+  // Messages arriving together (one batch right after another) are read together.
+  announceQueue.push(text);
   // Set after a beat, so the same text twice in a row is read twice.
-  announceTimer = setTimeout(() => (imageStatus.textContent = text), 60);
+  announceTimer = setTimeout(() => {
+    imageStatus.textContent = announceQueue.join('。');
+    announceQueue = [];
+  }, 60);
 }
 
 // Every image is redrawn onto a white canvas and sent as a JPEG at most MAX_SIDE wide:
@@ -592,10 +598,12 @@ function addImages(fileList) {
     announce(`没有添加图片：${currentModel()} 只支持文字`);
     return imageQueue;
   }
-  // Adding is an edit: 撤销 of an earlier 清空 must not overwrite it.
-  dismissUndo();
+  // Adding is an edit: 撤销 of an earlier 清空 must not overwrite it. A drop with no
+  // image at all adds nothing, so it leaves 撤销 alone.
+  if (files.some(mayBeImage)) dismissUndo();
   const gen = imageGen;
   imagesPending += files.length;
+  pendingFiles.push(...files);
   renderImageField();
   imageQueue = imageQueue.then(() => addBatch(files, gen));
   return imageQueue;
@@ -637,6 +645,8 @@ async function addBatch(files, gen) {
     } finally {
       if (gen === imageGen) {
         imagesPending -= 1;
+        const at = pendingFiles.indexOf(file);
+        if (at >= 0) pendingFiles.splice(at, 1);
         renderImageField();
       }
     }
@@ -647,14 +657,17 @@ async function addBatch(files, gen) {
   setImageMessage(problems.join('；'));
   if (added) onImagesEdited();
   else renderImageField();
-  const done = added ? `已添加 ${added} 张图片，共 ${state.images.length} 张` : '没有添加图片';
-  announce(problems.length ? `${done}。${problems.join('；')}` : done);
+  // A batch that added nothing is announced by its problems alone, so a message
+  // read together with an earlier batch's "已添加" does not contradict it.
+  const done = added ? `已添加 ${added} 张图片，共 ${state.images.length} 张` : '';
+  announce([done, problems.join('；')].filter(Boolean).join('。') || '没有添加图片');
 }
 
 // Replaces the whole list (清空, 撤销, an example): drops images still being prepared.
 function resetImageQueue() {
   imageGen += 1;
   imagesPending = 0;
+  pendingFiles = [];
   imageMessage = '';
 }
 
@@ -682,9 +695,12 @@ function renderThumbnails() {
   const ids = state.images.map((img) => img.id).join();
   if (ids === shownImages) return;
   shownImages = ids;
+  // An image arriving mid-batch rebuilds the list: keep focus on the same image's ×.
+  const focused = imageList.contains(document.activeElement) ? document.activeElement.closest('li')?.dataset.id : null;
   imageList.replaceChildren(
     ...state.images.map((img, i) => {
       const li = el('li', 'image-item');
+      li.dataset.id = img.id;
       const pic = el('img');
       pic.src = img.dataUrl;
       pic.alt = `图片 ${i + 1}：${img.name}`;
@@ -698,6 +714,7 @@ function renderThumbnails() {
       return li;
     }),
   );
+  if (focused) imageList.querySelector(`li[data-id="${focused}"] button`)?.focus();
 }
 
 function renderImageField() {
@@ -715,7 +732,7 @@ function renderImageField() {
   if (n) counts.push(`${n} / ${blocked ? 0 : support.max} 张`);
   if (imagesPending > 0) counts.push(`正在处理 ${imagesPending} 张…`);
   imageCount.textContent = counts.join(' · ');
-  imageDetailRow.hidden = n === 0 || blocked;
+  imageDetailRow.hidden = n === 0 || blocked || !imageDetailSupported(currentModel());
   renderThumbnails();
 
   const model = currentModel() || '这个模型';
@@ -1045,7 +1062,7 @@ function revealResult(target) {
   window.scrollBy({ top: delta, behavior });
 }
 
-function showMeta(json, ms, stateSource, imageCount = 0, detail = 'auto') {
+function showMeta(json, ms, stateSource, imageCount = 0, detail = null) {
   const rows = [
     ['耗时', `${ms} ms`],
     ['费用', formatUsd(json?.usage?.cost)],
@@ -1055,7 +1072,7 @@ function showMeta(json, ms, stateSource, imageCount = 0, detail = 'auto') {
     [
       '判断材料',
       ({ question: '问题本身（背景内容为空）', text: '背景内容（文本）', json: '背景内容（JSON）' }[stateSource] ?? '—') +
-        (imageCount ? ` + ${imageCount} 张图片（精度：${detail === 'low' ? '低' : '自动'}）` : ''),
+        (imageCount ? ` + ${imageCount} 张图片${detail ? `（精度：${detail === 'low' ? '低' : '自动'}）` : ''}` : ''),
     ],
     ['模型', json?.model ?? '—', 'wide mono'],
     ['生成 ID', json?.id ?? '—', 'wide mono'],
@@ -1210,7 +1227,7 @@ async function submit() {
   const items = built.items;
   const sent = { snapshot: snapshotOf(built), question: state.question.trim() };
   const imageCount = built.imageCount ?? 0;
-  const detail = state.imageDetail;
+  const detail = built.imageDetail;
   const modelName = modelShortName(built.body.model);
   // The request already includes every edit, so a preview refresh still waiting
   // on its debounce must not fire later and wipe this call's result.
