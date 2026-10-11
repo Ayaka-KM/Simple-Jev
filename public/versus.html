@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>对比调用 · Simple Jev</title>
+  <meta name="description" content="同一个问题同时发给 Jev、GPT-6 Luna Decisions 等 2–4 个决策模型，把它们的回答排在同一把尺子上，并排比较选了什么、概率差多少、有多确定。">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/versus.css">
+  <script src="/js/theme.js"></script>
+  <script type="module" src="/js/versus.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="1" y="1" width="30" height="30" rx="8" class="brand-bg"/>
+        <rect x="6" y="13" width="12" height="6" rx="2" class="brand-a"/>
+        <rect x="20" y="13" width="6" height="6" rx="2" class="brand-b"/>
+      </svg>
+      <div>
+        <h1>Simple Jev <span class="vs-title-tag">对比调用</span></h1>
+        <p class="tagline">同一个问题同时问几个决策模型，并排比较它们的回答</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <a href="/" class="icon-btn" aria-label="返回单模型调用：一次问一个模型，可以带图片">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="icon-static"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>
+        <span class="icon-btn-label">单模型调用</span>
+      </a>
+      <a href="/compare.html" class="icon-btn" aria-label="模型对比：GPT-6 Luna Decisions 与 Jev 详细对比">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="icon-static"><path d="M3 20h18M6 20V11M11 20V5M16 20v-6M21 20V9"/></svg>
+        <span class="icon-btn-label">模型对比</span>
+      </a>
+      <button type="button" id="theme-toggle" class="icon-btn" aria-label="切换主题：跟随系统">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="icon icon-auto"><path d="M12 3a9 9 0 1 0 0 18V3Z"/><circle cx="12" cy="12" r="9" fill="none"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="icon icon-light"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" fill="none"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="icon icon-dark"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z"/></svg>
+        <span id="theme-label" class="icon-btn-label">跟随系统</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="layout vs-layout">
+    <div class="form-col">
+      <form id="versus-form" class="form-stack" novalidate>
+        <section class="card" aria-labelledby="conn-title">
+          <h2 id="conn-title" class="card-title"><span class="step">1</span>连接和模型</h2>
+
+          <div class="field">
+            <label for="base-url">Base URL</label>
+            <input id="base-url" name="baseUrl" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://openrouter.ai/api" aria-describedby="endpoint-preview">
+            <p class="hint" id="endpoint-preview"></p>
+          </div>
+
+          <div class="field">
+            <label for="api-key">API Key</label>
+            <div class="input-row">
+              <input id="api-key" name="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-or-v1-…" aria-describedby="key-hint">
+              <button type="button" id="toggle-key" class="ghost-btn" aria-controls="api-key" aria-label="显示 Key">显示</button>
+            </div>
+            <label class="check"><input type="checkbox" id="remember-key"> 在这个浏览器里记住 Key（只在自己的设备上勾选）</label>
+            <p class="hint" id="key-hint">Key 只在你的浏览器和上面的地址之间直接传输，不经过本站服务器；和单模型调用页面共用。没有 Key？到 <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer">OpenRouter 设置页</a> 生成一个。</p>
+          </div>
+
+          <div class="field">
+            <div class="field-head">
+              <span class="field-label" id="models-label">要对比的模型 <span class="req">2–4 个</span></span>
+              <span class="vs-count" id="models-count"></span>
+            </div>
+            <ol class="vs-model-list" id="model-list" aria-labelledby="models-label"></ol>
+            <button type="button" id="add-model" class="add-btn">＋ 添加模型</button>
+            <p class="hint" id="models-note" hidden></p>
+            <p class="hint">同一个请求同时发给每个模型，只有 <code>model</code> 不同。费用是各模型之和，一次纯文字调用通常不到 $0.0001。</p>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="type-title">
+          <h2 id="type-title" class="card-title"><span class="step">2</span>选择题型</h2>
+          <div class="type-picker" role="radiogroup" aria-labelledby="type-title">
+            <label class="type-option">
+              <input type="radio" name="type" value="noul">
+              <span class="type-body">
+                <span class="type-name">是 / 否</span>
+                <span class="type-desc">判断一件事是否成立，返回“是”的概率</span>
+              </span>
+            </label>
+            <label class="type-option">
+              <input type="radio" name="type" value="choice">
+              <span class="type-body">
+                <span class="type-name">单选</span>
+                <span class="type-desc">从几个选项里挑一个，返回每个选项的概率</span>
+              </span>
+            </label>
+            <label class="type-option">
+              <input type="radio" name="type" value="score">
+              <span class="type-body">
+                <span class="type-name">打分</span>
+                <span class="type-desc">放到一个从低到高的等级上，返回分数</span>
+              </span>
+            </label>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="q-title">
+          <h2 id="q-title" class="card-title"><span class="step">3</span>输入问题</h2>
+          <div class="examples">
+            <span class="examples-label">试试示例</span>
+            <div id="examples" class="chips"></div>
+          </div>
+          <div class="field">
+            <label for="question">问题 <span class="req">必填</span></label>
+            <input id="question" name="question" type="text" autocomplete="off" placeholder="薛定谔的猫是活的还是死的？">
+          </div>
+          <div class="field">
+            <label for="context">背景内容 <span class="opt">选填</span></label>
+            <textarea id="context" name="context" rows="3" placeholder="要让模型判断的材料，比如一段客户留言。不填就直接拿问题本身来判断。"></textarea>
+            <p class="hint">如果填的是 JSON 对象或数组，会作为结构化数据发送。对比调用只发文字，暂不支持图片；要判断图片，请用<a href="/">单模型调用</a>。</p>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="opt-title">
+          <h2 id="opt-title" class="card-title"><span class="step">4</span><span id="opt-title-text">可选答案</span></h2>
+
+          <div id="options-noul" class="options" hidden>
+            <p class="hint">模型会给出“是”的概率。下面两项可以不填，填了能让判断标准更明确。</p>
+            <div class="field">
+              <label for="noul-true"><span class="swatch s1" aria-hidden="true"></span>“是”表示 <span class="opt">选填</span></label>
+              <input id="noul-true" type="text" autocomplete="off" placeholder="例如：客户描述了产品出错的行为">
+            </div>
+            <div class="field">
+              <label for="noul-false"><span class="swatch s2" aria-hidden="true"></span>“否”表示 <span class="opt">选填</span></label>
+              <input id="noul-false" type="text" autocomplete="off" placeholder="例如：客户只是在提问或提需求">
+            </div>
+          </div>
+
+          <div id="options-choice" class="options" hidden>
+            <p class="hint">每个选项填一个名称；说明可以不填，填了模型更清楚什么情况该选它。</p>
+            <ol id="choice-list" class="option-list"></ol>
+            <button type="button" id="add-choice" class="add-btn">＋ 添加选项</button>
+          </div>
+
+          <div id="options-score" class="options" hidden>
+            <p class="hint">按<strong>从低到高</strong>的顺序填写每一档，可以用箭头调整顺序。</p>
+            <ol id="score-list" class="option-list"></ol>
+            <button type="button" id="add-score" class="add-btn">＋ 添加档位</button>
+          </div>
+        </section>
+
+        <div id="form-errors" class="form-errors" role="alert" hidden></div>
+
+        <div class="submit-row">
+          <button type="submit" id="submit" class="primary-btn">
+            <span class="spinner" aria-hidden="true"></span>
+            <span class="submit-text">发起对比</span>
+          </button>
+          <button type="button" id="clear-cache" class="secondary-btn" title="删除本站保存在浏览器里的所有内容，包括记住的 API Key">清除缓存</button>
+          <span id="cache-notice" class="inline-notice" role="status"></span>
+          <span class="kbd-hint"><kbd>Ctrl</kbd> + <kbd>Enter</kbd></span>
+        </div>
+      </form>
+
+      <aside class="card about">
+        <h2 class="card-title">怎么看对比结果</h2>
+        <p>每个模型收到的请求完全一样，只有 <code>model</code> 不同。几个请求同时发出，谁先返回谁的那一行先长出来。</p>
+        <p>决策模型不写理由，只在你给的选项之间分配概率，所以对比看三件事：<strong>选了哪个</strong>、<strong>概率差多少</strong>、<strong>有多确定</strong>。所有模型画在同一把尺子上，最上面一句话总结结论是否一致、分歧最大在哪里。</p>
+        <p class="hint">问题和选项和单模型调用页面共用，在一边改了，打开另一边也能看到。Jev 和 GPT-6 Luna 的规格、价格等区别见<a href="/compare.html">模型对比</a>。</p>
+      </aside>
+    </div>
+
+    <section class="result-col" aria-labelledby="result-title">
+      <div class="card result-card" id="result-card">
+        <div class="result-head">
+          <h2 id="result-title" class="card-title">对比结果</h2>
+          <span id="result-status" class="status-chip" data-state="idle">等待调用</span>
+        </div>
+        <p id="result-question" class="result-question"></p>
+        <div id="vs-viz" class="vs-viz"></div>
+
+        <section id="vs-meta" class="vs-block vs-meta" aria-labelledby="vs-meta-title" hidden>
+          <div class="vs-block-head">
+            <h3 id="vs-meta-title" class="vs-block-title">调用详情</h3>
+            <p class="vs-block-note" id="meta-note"></p>
+          </div>
+          <div class="vs-table-scroll" id="meta-scroll">
+            <table class="vs-table" id="meta-table"></table>
+          </div>
+          <p class="vs-scroll-hint" id="meta-scroll-hint" hidden>左右滑动查看全部模型</p>
+        </section>
+
+        <details id="raw" class="raw" hidden>
+          <summary>查看原始请求和响应</summary>
+          <div id="raw-models"></div>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Simple Jev · 本站服务器不接收也不保存你的数据；表单内容只保存在你自己的浏览器里。</p>
+  </footer>
+
+  <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+</body>
+</html>
