@@ -1495,6 +1495,13 @@ kbd {
   .icon-btn-label {
     display: none;
   }
+  /* With their labels hidden the header buttons are round icons, which leaves the
+     title room for three of them on a 360px screen. */
+  .icon-btn:has(> .icon-btn-label) {
+    width: 36px;
+    padding: 0;
+    justify-content: center;
+  }
   .card {
     padding: 16px;
   }

@@ -1,0 +1,582 @@
+/* Side-by-side page (versus.html). Page-only styles on top of styles.css: every color
+   is a token from there, so light and dark themes come for free. All classes are vs-*
+   so they never collide with the other pages. Models are told apart by name (each one
+   has its own row on the same scale); colors stay with the options, exactly as on the
+   single-model page. */
+
+/* ---- header -------------------------------------------------------------- */
+
+.vs-title-tag {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 24px;
+  letter-spacing: 0;
+  vertical-align: 0.15em;
+  white-space: nowrap;
+}
+
+/* A little more room for the result column, where the charts sit side by side. Only
+   while there are two columns: below 961px styles.css stacks them. */
+@media (min-width: 961px) {
+  .vs-layout {
+    grid-template-columns: minmax(0, 0.94fr) minmax(0, 1.16fr);
+  }
+}
+
+.about code {
+  font-size: 0.9em;
+  color: var(--ink-1);
+}
+
+.status-chip[data-state="partial"] {
+  background: var(--chip-stale-bg);
+  color: var(--chip-stale-ink);
+}
+
+/* ---- model rows ---------------------------------------------------------- */
+
+.vs-count {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.vs-model-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.vs-model-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+}
+.vs-model-row .level-num {
+  margin-top: 10px;
+}
+.vs-model-row .remove-btn {
+  margin-top: 3px;
+}
+.vs-model-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.vs-model-info {
+  font-size: 12.5px;
+}
+
+/* ---- comparison: summary --------------------------------------------------- */
+
+.vs-viz {
+  /* The model-name column of the meters and the per-option bars. */
+  --vs-name: clamp(6.5em, 28%, 11em);
+  padding-top: 8px;
+}
+
+.vs-verdict {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.6;
+  background: var(--chip-idle-bg);
+  color: var(--chip-idle-ink);
+}
+.vs-verdict[data-state="agree"] { background: var(--chip-done-bg); color: var(--chip-done-ink); }
+.vs-verdict[data-state="differ"] { background: var(--chip-stale-bg); color: var(--chip-stale-ink); }
+.vs-verdict[data-state="none"] { background: var(--chip-error-bg); color: var(--chip-error-ink); }
+
+.vs-summary-main {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.vs-summary-sub {
+  margin-top: 2px;
+  color: var(--ink-2);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.vs-summary:not(.is-final) .vs-summary-main {
+  color: var(--ink-3);
+  font-size: 18px;
+  font-weight: 600;
+}
+.vs-summary:not(.is-final) .vs-summary-sub {
+  color: var(--ink-3);
+}
+.vs-points {
+  margin: 8px 0 0;
+  padding-left: 1.2em;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.vs-points li + li {
+  margin-top: 3px;
+}
+.vs-points li::marker {
+  color: var(--ink-3);
+}
+
+/* ---- comparison: blocks ---------------------------------------------------- */
+
+.vs-block {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--hairline);
+}
+.vs-block-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-bottom: 12px;
+}
+.vs-block-title {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 650;
+}
+.vs-block-note {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.vs-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.vs-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.vs-viz .is-hint {
+  color: var(--ink-3);
+  font-weight: 500;
+}
+
+/* ---- comparison: one row per model ----------------------------------------- */
+
+.vs-tracks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.vs-track-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin-bottom: 6px;
+}
+.vs-track-name {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.vs-track-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-left: auto;
+  font-size: 14px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.vs-track[data-state="idle"] .vs-track-value,
+.vs-track[data-state="busy"] .vs-track-value {
+  color: var(--ink-3);
+  font-weight: 500;
+}
+.vs-track[data-state="error"] .vs-track-value {
+  color: var(--danger-ink);
+}
+
+/* 是/否 and 单选: a stacked bar per model, 2px surface gaps between segments. */
+.vs-bar {
+  position: relative;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--track);
+  overflow: hidden;
+}
+.vs-seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--c);
+  transition: filter 0.15s;
+}
+.vs-seg:hover {
+  filter: brightness(1.12) saturate(1.05);
+}
+
+/* 打分: a ruler per model, the level numbers once above them. The axis and every
+   rail share the same 10px inset, so the ticks line up. */
+.vs-axis {
+  position: relative;
+  height: 18px;
+  margin: 0 10px 4px;
+}
+.vs-axis-tick {
+  position: absolute;
+  top: 0;
+  min-width: 22px;
+  transform: translateX(-50%);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+.vs-scale {
+  padding: 7px 10px 10px;
+}
+.vs-rail {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--track);
+}
+.vs-rail-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--ramp-lo), var(--accent));
+}
+.vs-rail-tick {
+  position: absolute;
+  top: 9px;
+  width: 1px;
+  height: 5px;
+  background: var(--line);
+  transform: translateX(-50%);
+}
+.vs-dot {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface), 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+/* A hover target bigger than the dot itself. */
+.vs-dot::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+}
+.vs-levels {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.vs-levels li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.vs-levels .level-num,
+.vs-option-head .level-num {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  font-size: 11.5px;
+}
+
+.vs-track[data-state="busy"] .vs-bar,
+.vs-track[data-state="busy"] .vs-rail {
+  background-image: linear-gradient(100deg, transparent 20%, var(--shimmer) 50%, transparent 80%);
+  background-size: 220% 100%;
+  animation: shimmer 1.15s linear infinite;
+}
+
+.vs-track-error {
+  padding: 9px 12px;
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  background: var(--danger-soft);
+  color: var(--danger-ink);
+  font-size: 13.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.vs-track-error strong,
+.vs-track-error span {
+  display: block;
+}
+
+/* ---- comparison: confidence and every option, model by model ----------------- */
+
+.vs-meters,
+.vs-options,
+.vs-option-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.vs-meters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.vs-row {
+  display: grid;
+  grid-template-columns: var(--vs-name) minmax(0, 1fr) 6.5em;
+  align-items: center;
+  gap: 12px;
+}
+/* The bars borrow .row-meter from styles.css, but not its phone placement (made for
+   the single-model page's rows). */
+.vs-row .row-meter {
+  grid-column: auto;
+  grid-row: auto;
+}
+.vs-row-name {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.vs-row-value {
+  font-size: 13.5px;
+  font-weight: 650;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.vs-viz:not(.has-result) .vs-row-value {
+  color: var(--ink-3);
+  font-weight: 500;
+}
+
+.vs-options {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.vs-option-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.vs-option-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+}
+.vs-option-label {
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.vs-option-desc {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+.vs-option-gap {
+  flex-shrink: 0;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.vs-option-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 20px;
+}
+.vs-option-rows .vs-row {
+  grid-template-columns: var(--vs-name) minmax(0, 1fr) 3.2em 1em;
+  gap: 10px;
+}
+.vs-row-mark {
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+.vs-row.is-pick .vs-row-name {
+  color: var(--ink-1);
+  font-weight: 600;
+}
+
+.result-card.is-stale .vs-seg,
+.result-card.is-stale .vs-rail-fill,
+.result-card.is-stale .vs-dot {
+  opacity: 0.4;
+  filter: grayscale(0.6);
+  transition: opacity 0.2s, filter 0.2s;
+}
+
+/* ---- call details ------------------------------------------------------------ */
+
+.vs-meta .vs-block-head {
+  margin-bottom: 10px;
+}
+.vs-table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+.vs-table-scroll:focus-visible {
+  outline-offset: 2px;
+}
+.vs-scroll-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.vs-table {
+  /* --vs-cols: the number of models, set by versus.js. */
+  --vs-label: 8em;
+  --vs-col: 8em;
+  width: 100%;
+  min-width: calc(var(--vs-label) + var(--vs-cols, 2) * var(--vs-col));
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13.5px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+.vs-table th,
+.vs-table td {
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+  border-top: 1px solid var(--hairline);
+  overflow-wrap: anywhere;
+}
+.vs-table thead th {
+  border-top: 0;
+  background: var(--surface-2);
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink-1);
+}
+.vs-table thead th:first-child {
+  width: var(--vs-label);
+}
+.vs-table tbody th {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.vs-table td {
+  color: var(--ink-1);
+}
+.vs-table td.mono {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.vs-table td.is-error {
+  color: var(--danger-ink);
+  font-weight: 600;
+}
+
+.vs-raw-model {
+  margin-top: 12px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+}
+.vs-raw-model > summary {
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.vs-raw-model > summary:hover {
+  color: var(--ink-1);
+}
+
+/* ---- responsive ---------------------------------------------------------- */
+
+@media (max-width: 640px) {
+  .vs-title-tag {
+    font-size: 12.5px;
+    line-height: 22px;
+    padding: 0 8px;
+  }
+  .vs-summary-main {
+    font-size: 18px;
+  }
+  /* Rows restack: the model name on its own line, the bar and value under it. */
+  .vs-row,
+  .vs-option-rows .vs-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 2px;
+  }
+  .vs-option-rows .vs-row {
+    grid-template-columns: minmax(0, 1fr) 3.2em 1em;
+  }
+  .vs-row-name {
+    grid-column: 1 / -1;
+  }
+  .vs-option-rows {
+    padding-left: 0;
+  }
+  .vs-table {
+    --vs-label: 6em;
+    --vs-col: 7.2em;
+  }
+  .vs-table th,
+  .vs-table td {
+    padding: 8px 10px;
+  }
+}
